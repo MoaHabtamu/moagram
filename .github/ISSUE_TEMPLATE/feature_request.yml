@@ -1,0 +1,31 @@
+name: Feature request
+description: Propose a specific improvement to Moagram.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing proposals first. Use Discussions for open-ended ideas or setup questions.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Explain who is affected and give a concrete example.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe what a user would do and what should happen.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: considerations
+    attributes:
+      label: Compatibility and other considerations
+      description: Note account, offline, privacy, or usability implications if relevant.

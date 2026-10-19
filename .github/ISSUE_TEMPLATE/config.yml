@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and early ideas
+    url: https://github.com/MoaHabtamu/moagram/discussions
+    about: Ask for help or discuss an idea before filing a concrete request.
+  - name: Report a security vulnerability privately
+    url: https://github.com/MoaHabtamu/moagram/security/advisories/new
+    about: Keep exploit details, account data, and credentials out of public issues.
+  - name: Read the documentation
+    url: https://github.com/MoaHabtamu/moagram/blob/master/docs/README.md
+    about: Installation, features, repeating messages, and build instructions.

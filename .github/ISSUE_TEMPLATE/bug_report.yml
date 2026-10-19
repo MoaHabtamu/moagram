@@ -1,0 +1,55 @@
+name: Bug report
+description: Report a reproducible problem in Moagram.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. For vulnerabilities, use the private reporting link below instead.
+        Remove login codes, phone numbers, API credentials, and private content from all attachments.
+  - type: input
+    id: version
+    attributes:
+      label: Moagram version or commit
+      placeholder: "12.10.1 preview 1, build code, or commit SHA"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Android version and device model
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Give a small, repeatable example, preferably in a test chat.
+      placeholder: "1. Open…
+2. Select…
+3. Observe…"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the exact visible error and how consistently it happens.
+    validations:
+      required: true
+  - type: textarea
+    id: scheduling
+    attributes:
+      label: Repeat details, if relevant
+      description: Interval, first date/time, time zone, queued count, free/Premium account, and Manage Repeats status/error.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Sanitized logs or screenshots, connectivity, and anything else that helps reproduce it.

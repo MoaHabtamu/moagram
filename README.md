@@ -1,66 +1,70 @@
-## Moagram for Android
+<p align="center">
+  <img src="TMessagesProj/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="Moagram icon" width="104" height="104">
+</p>
+<h1 align="center">Moagram</h1>
+<p align="center">An unofficial Telegram client for Android, with repeating messages, hidden chats, and configurable privacy controls.</p>
+<p align="center">
+  <a href="https://github.com/MoaHabtamu/moagram/releases">Download preview</a> ·
+  <a href="docs/README.md">Documentation</a> ·
+  <a href="https://github.com/MoaHabtamu/moagram/discussions">Ask a question</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
 
-Moagram is an unofficial Android client based on [Telegram for Android](https://github.com/DrKLO/Telegram). It includes custom branding, privacy controls, hidden chats, and repeating scheduled messages.
+## What is Moagram?
 
-Repeats keep up to seven future occurrences queued for each rule. The app replenishes the queue when it runs and connects; open it regularly to keep repeats going. Manage Repeats in the chat menu lets you pause or stop a rule.
+Moagram builds on [Telegram for Android](https://github.com/DrKLO/Telegram) with features for everyday scheduling, chat organization, and control over local app behavior. It connects to Telegram using your Telegram account. It is an independent project and is not affiliated with or endorsed by Telegram.
 
-### Building Moagram standalone
+The current preview is based on Telegram **12.10.1** and supports **Android 5.0+**. This is an early community project: the repeat queue has automated regression coverage and the standalone build has been tested on a device; broader compatibility and privacy behavior still need testing.
 
-Copy `local.properties.example` to `local.properties`, set your Android SDK path and your own Telegram API ID/hash, and configure your signing key. The local settings file, personal keystore, and APKs are ignored by Git. Back up the signing key and its passwords securely: updates to an existing installation require the same key.
+## Features
 
-Build with the Android SDK/NDK versions listed below and JDK 17:
+| Feature | What it does |
+| --- | --- |
+| **Repeating messages** | Queue up to seven future occurrences per local rule on free accounts, replenished while Moagram runs and connects. |
+| **Manage Repeats** | See queued counts, inspect errors, retry a paused rule, or stop a series. |
+| **Ghost Mode** | Configure online-presence, typing, read-receipt, and story-view behavior per account. |
+| **Hidden chats** | Hide selected chats from the normal list, choose opening shortcuts, and configure a passcode and notifications. |
+| **Local history controls** | Optional retention of received deleted messages, cached media, message revisions, and story-viewer lists. |
+| **Custom interface** | Moagram branding and additional chat/search controls. |
+
+Read the [feature guide](docs/FEATURES.md) for behavior and limits. Client-side privacy controls are not a guarantee of anonymity; Telegram servers and other clients can still observe account activity.
+
+## Try it
+
+1. Download the APK from [Releases](https://github.com/MoaHabtamu/moagram/releases). Preview releases are marked **Pre-release**.
+2. Follow the [installation guide](docs/USAGE.md), including the checksum and update instructions.
+3. Sign in with your Telegram account and explore **Settings → Ghost Mode**, **Settings → Hidden Chats**, or a chat's scheduling controls.
+
+**A repeat example:** create three Daily rules at 09:00, 09:01, and 09:02. Each rule can queue seven occurrences, for up to 21 scheduled messages across the three rules. Moagram must run and connect regularly to refill the queue; it cannot continue indefinitely if the app stays offline. [How repeats work →](docs/REPEATING_MESSAGES.md)
+
+## Build your own
 
 ```bash
+git clone --recursive --shallow-submodules https://github.com/MoaHabtamu/moagram.git
+cd moagram
+cp local.properties.example local.properties
+# Fill in your SDK path, Telegram API credentials, and signing settings.
 ./gradlew :TMessagesProj_AppStandalone:assembleAfatStandalone
 ```
 
-The standalone app uses package `org.moagram.messenger.web`. APKs are generated under `TMessagesProj_AppStandalone/build/outputs/apk/afat/standalone/`. See [repeat tests](Tools/tests/local-repeats.md) for verification instructions.
+Use JDK 17 or a compatible newer JDK, Android SDK 36, NDK 27.2.12479018, and CMake 3.22.1. The [build guide](docs/BUILDING.md) covers tool installation, API credentials, signing, Firebase configuration, and troubleshooting. Personal credentials and the Moagram signing key stay outside Git.
 
-The original Telegram attribution and development notes follow. For Moagram, use `local.properties` for API credentials and standalone signing instead of putting personal credentials in source files. Firebase configuration is inherited from upstream; configure your own project before distributing builds.
+## Documentation
 
-## Telegram messenger for Android (upstream)
+| I want to… | Start here |
+| --- | --- |
+| Install or update the app | [Usage and installation](docs/USAGE.md) |
+| Understand the custom controls | [Features](docs/FEATURES.md) |
+| Set up daily or weekly messages | [Repeating messages](docs/REPEATING_MESSAGES.md) |
+| Compile my own APK | [Building](docs/BUILDING.md) |
+| Find the relevant code and run checks | [Development](docs/DEVELOPMENT.md) |
+| Report a bug or propose a change | [Contributing](CONTRIBUTING.md) |
+| Report a vulnerability privately | [Security policy](SECURITY.md) |
 
-[Telegram](https://telegram.org) is a messaging app with a focus on speed and security. It’s superfast, simple and free.
-The upstream repository contains the official source code for [Telegram App for Android](https://play.google.com/store/apps/details?id=org.telegram.messenger).
+## Help improve Moagram
 
-## Creating your Telegram Application
+Questions and early ideas belong in [Discussions](https://github.com/MoaHabtamu/moagram/discussions). Use the [issue forms](https://github.com/MoaHabtamu/moagram/issues/new/choose) for reproducible bugs and concrete feature requests. Pull requests for fixes, documentation, accessibility, translations, and tests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-We welcome all developers to use our API and source code to create applications on our platform.
-There are several things we require from **all developers** for the moment.
+## License and attribution
 
-1. [**Obtain your own api_id**](https://core.telegram.org/api/obtaining_api_id) for your application.
-2. Please **do not** use the name Telegram for your app — or make sure your users understand that it is unofficial.
-3. Kindly **do not** use our standard logo (white paper plane in a blue circle) as your app's logo.
-3. Please study our [**security guidelines**](https://core.telegram.org/mtproto/security_guidelines) and take good care of your users' data and privacy.
-4. Please remember to publish **your** code too in order to comply with the licences.
-
-### API, Protocol documentation
-
-Telegram API manuals: https://core.telegram.org/api
-
-MTproto protocol manuals: https://core.telegram.org/mtproto
-
-### Compilation Guide
-
-**Note**: In order to support [reproducible builds](https://core.telegram.org/reproducible-builds), this repo contains dummy release.keystore,  google-services.json and filled variables inside BuildVars.java. Before publishing your own APKs please make sure to replace all these files with your own.
-
-You will require Android Studio 2025.1.4, Android NDK 27.2.12479018 and Android SDK 36.
-
-1. Clone the Telegram source code with its submodules:
-   ```bash
-   git clone --recursive --shallow-submodules https://github.com/DrKLO/Telegram.git Telegram
-   ```
-   In case you forgot the `--recursive` flag, change to the `Telegram` directory and run:
-   ```bash
-   git submodule init && git submodule update --init --recursive --depth=1
-   ```
-2. Copy your release.keystore into TMessagesProj/config
-3. Fill out RELEASE_KEY_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_STORE_PASSWORD in gradle.properties to access your  release.keystore
-4.  Go to https://console.firebase.google.com/, create two android apps with application IDs org.telegram.messenger and org.telegram.messenger.beta, turn on firebase messaging and download google-services.json, which should be copied to the same folder as TMessagesProj.
-5. Open the project in the Studio (note that it should be opened, NOT imported).
-6. Fill out values in TMessagesProj/src/main/java/org/telegram/messenger/BuildVars.java – there’s a link for each of the variables showing where and which data to obtain.
-7. You are ready to compile Telegram.
-
-### Localization
-
-We moved all translations to https://translations.telegram.org/en/android/. Please use it.
+The repository includes the [GNU GPL v2 license](LICENSE) inherited from Telegram. Existing file notices and third-party licenses remain in place; see [upstream and third-party notes](docs/UPSTREAM.md). Moagram is not an official Telegram release and does not provide a Telegram Premium subscription or unlock server-controlled Premium features.
