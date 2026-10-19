@@ -14,24 +14,12 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
-    <uses-permission android:name="android.permission.CALL_PHONE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
-    <uses-permission android:name="android.permission.READ_CALL_LOG" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
-
-    <permission android:name="${applicationId}.permission.MAPS_RECEIVE" android:protectionLevel="signature"/>
-
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
-    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" tools:node="remove" />
+    <uses-permission android:name="android.permission.SEND_SMS" tools:node="remove" />
+    <uses-permission android:name="android.permission.CALL_PHONE" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" tools:node="remove" />
 
     <application
         android:icon="@mipmap/ic_launcher_sa"

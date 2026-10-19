@@ -18,6 +18,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
@@ -32,6 +33,7 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.Premium.PremiumButtonView;
 import org.telegram.ui.Components.Premium.PremiumFeatureBottomSheet;
 import org.telegram.ui.Components.ScaleStateListAnimator;
+import org.telegram.ui.Components.Switch;
 import org.telegram.ui.LaunchActivity;
 import org.telegram.ui.PremiumPreviewFragment;
 
@@ -116,6 +118,18 @@ public class StealthModeAlert extends BottomSheet {
         itemCell2.description.setText(LocaleController.getString(R.string.HideNextViewsDescription));
 
         linearLayout.addView(itemCell2, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT,0, 0, 10, 0, 0));
+
+        ToggleItemCell cacheCell = new ToggleItemCell(getContext());
+        cacheCell.imageView.setImageResource(R.drawable.msg_stories_views);
+        cacheCell.textView.setText(LocaleController.getString(R.string.CacheStoryViewers));
+        cacheCell.description.setText(LocaleController.getString(R.string.CacheStoryViewersInfo));
+        cacheCell.switchView.setChecked(SharedConfig.cacheStoryViewers, false);
+        cacheCell.setOnClickListener(v -> {
+            boolean next = !SharedConfig.cacheStoryViewers;
+            SharedConfig.setCacheStoryViewers(next);
+            cacheCell.switchView.setChecked(next, true);
+        });
+        linearLayout.addView(cacheCell, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 0, 10, 0, 0));
 
         button = new PremiumButtonView(context, AndroidUtilities.dp(8), true, resourcesProvider);
         button.drawGradient = false;
@@ -273,6 +287,38 @@ public class StealthModeAlert extends BottomSheet {
             description.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
             description.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
             addView(description, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 68, 28, 16, 8));
+        }
+    }
+
+    private class ToggleItemCell extends FrameLayout {
+
+        TextView textView;
+        TextView description;
+        ImageView imageView;
+        Switch switchView;
+
+        public ToggleItemCell(Context context) {
+            super(context);
+            imageView = new ImageView(context);
+            imageView.setColorFilter(new PorterDuffColorFilter(Theme.getColor(Theme.key_featuredStickers_addButton), PorterDuff.Mode.MULTIPLY));
+            addView(imageView, LayoutHelper.createFrame(28, 28, 0, 25, 12, 16, 0));
+
+            switchView = new Switch(context);
+            switchView.setColors(Theme.key_switchTrack, Theme.key_switchTrackChecked, Theme.key_windowBackgroundWhite, Theme.key_windowBackgroundWhite);
+            addView(switchView, LayoutHelper.createFrame(37, 20, Gravity.RIGHT | Gravity.CENTER_VERTICAL, 0, 0, 21, 0));
+
+            textView = new TextView(context);
+            textView.setTypeface(AndroidUtilities.bold());
+            textView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText, resourcesProvider));
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            addView(textView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 68, 8, 68, 0));
+
+            description = new TextView(context);
+            description.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText, resourcesProvider));
+            description.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            addView(description, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 0, 68, 28, 68, 8));
+
+            setBackground(Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector, resourcesProvider), 2));
         }
     }
 }

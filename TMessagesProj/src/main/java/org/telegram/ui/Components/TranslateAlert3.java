@@ -38,6 +38,7 @@ import org.telegram.messenger.LanguageDetector;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
@@ -209,6 +210,9 @@ public class TranslateAlert3 extends BottomSheetWithRecyclerListView {
         return this;
     }
     public TranslateAlert3 setNoforwards(boolean noforwards) {
+        if (SharedConfig.allowSaveRestrictedMedia) {
+            noforwards = false;
+        }
         this.noforwards = noforwards;
         return this;
     }

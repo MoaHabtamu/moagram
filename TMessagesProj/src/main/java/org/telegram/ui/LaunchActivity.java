@@ -1371,6 +1371,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private void showUpdateActivity(int account, TLRPC.TL_help_appUpdate update, boolean check) {
+        if (!BuildVars.CHECK_UPDATES) {
+            return;
+        }
         if (blockingUpdateView == null) {
             blockingUpdateView = new BlockingUpdateView(LaunchActivity.this);
             drawerLayoutContainer.addView(blockingUpdateView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
@@ -2125,26 +2128,30 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                                                 }
                                             } else if (path.startsWith("c/")) {
                                                 List<String> segments = data.getPathSegments();
-                                                if (segments.size() >= 3) {
+                                                if (segments.size() >= 2) {
                                                     channelId = Utilities.parseLong(segments.get(1));
-                                                    messageId = Utilities.parseInt(segments.get(2));
-                                                    if (messageId == 0 || channelId == 0) {
-                                                        messageId = null;
+                                                    if (channelId == 0) {
                                                         channelId = null;
                                                     }
-                                                    threadId = Utilities.parseLong(data.getQueryParameter("thread"));
-                                                    if (threadId == 0) {
-                                                        threadId = null;
-                                                    }
-                                                    if (threadId == null) {
-                                                        threadId = Utilities.parseLong(data.getQueryParameter("topic"));
+                                                    if (segments.size() >= 3) {
+                                                        messageId = Utilities.parseInt(segments.get(2));
+                                                        if (messageId == 0) {
+                                                            messageId = null;
+                                                        }
+                                                        threadId = Utilities.parseLong(data.getQueryParameter("thread"));
                                                         if (threadId == 0) {
                                                             threadId = null;
                                                         }
-                                                    }
-                                                    if (threadId == null && messageId != null && segments.size() >= 4) {
-                                                        threadId = (long) (int) messageId;
-                                                        messageId = Utilities.parseInt(segments.get(3));
+                                                        if (threadId == null) {
+                                                            threadId = Utilities.parseLong(data.getQueryParameter("topic"));
+                                                            if (threadId == 0) {
+                                                                threadId = null;
+                                                            }
+                                                        }
+                                                        if (threadId == null && messageId != null && segments.size() >= 4) {
+                                                            threadId = (long) (int) messageId;
+                                                            messageId = Utilities.parseInt(segments.get(3));
+                                                        }
                                                     }
                                                 }
                                                 if (data.getQuery() != null && segments.size() == 2) {
@@ -5311,7 +5318,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
                 }
             }));
-        } else if (channelId != null && (messageId != null || isBoost)) {
+        } else if (channelId != null) {
             if (threadId != null) {
                 TLRPC.Chat chat = MessagesController.getInstance(intentAccount).getChat(channelId);
                 if (chat != null) {
@@ -5953,6 +5960,16 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     private boolean firstAppUpdateCheck = true;
     public void checkAppUpdate(boolean force, Browser.Progress progress) {
+        if (!BuildVars.CHECK_UPDATES) {
+            if (progress != null) {
+                progress.end();
+                BaseFragment fragment = getLastFragment();
+                if (fragment != null) {
+                    BulletinFactory.of(fragment).createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(R.string.YourVersionIsLatest)).show();
+                }
+            }
+            return;
+        }
         if (!ApplicationLoader.isStandaloneBuild() && !ApplicationLoader.isBetaBuild()) {
             return;
         }
@@ -6726,6 +6743,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     protected void onPause() {
         super.onPause();
         isResumed = false;
+        closeHiddenChatsOnBackground(actionBarLayout);
+        closeHiddenChatsOnBackground(rightActionBarLayout);
+        closeHiddenChatsOnBackground(layersActionBarLayout);
         pipActivityHandler.onPause();
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.stopAllHeavyOperations, 4096);
         ApplicationLoader.mainInterfacePaused = true;
@@ -6770,6 +6790,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         //if (refreshRateController != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
         //    refreshRateController.stop();
         //}
+    }
+
+    private void closeHiddenChatsOnBackground(INavigationLayout layout) {
+        if (layout == null || layout.getFragmentStack().isEmpty()) {
+            return;
+        }
+        List<BaseFragment> stack = layout.getFragmentStack();
+        int hiddenChatsIndex = -1;
+        for (int i = 0; i < stack.size(); i++) {
+            BaseFragment fragment = stack.get(i);
+            if (fragment instanceof DialogsActivity && ((DialogsActivity) fragment).isHiddenChats()) {
+                hiddenChatsIndex = i;
+                break;
+            }
+        }
+        if (hiddenChatsIndex < 0) {
+            return;
+        }
+        for (int i = stack.size() - 1; i >= hiddenChatsIndex; i--) {
+            layout.removeFragmentFromStack(stack.get(i), true);
+        }
     }
 
     private boolean isStarted;
@@ -7024,10 +7065,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
         if (UserConfig.getInstance(UserConfig.selectedAccount).unacceptedTermsOfService != null) {
             showTosActivity(UserConfig.selectedAccount, UserConfig.getInstance(UserConfig.selectedAccount).unacceptedTermsOfService);
-        } else if (SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
+        } else if (BuildVars.CHECK_UPDATES && SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
             showUpdateActivity(UserConfig.selectedAccount, SharedConfig.pendingAppUpdate, true);
         }
-        checkAppUpdate(false, null);
+        if (BuildVars.CHECK_UPDATES) {
+            checkAppUpdate(false, null);
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             ApplicationLoader.canDrawOverlays = Settings.canDrawOverlays(this);

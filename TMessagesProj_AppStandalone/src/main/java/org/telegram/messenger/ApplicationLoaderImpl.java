@@ -5,13 +5,8 @@ import static org.telegram.ui.PremiumPreviewFragment.applyNewSpan;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
-import android.net.Uri;
-import android.os.Build;
 import android.text.SpannableStringBuilder;
 import android.view.ViewGroup;
-
-import androidx.core.content.FileProvider;
 
 import org.json.JSONObject;
 import org.telegram.messenger.web.BuildConfig;
@@ -21,7 +16,7 @@ import org.telegram.tgnet.TL_smsjobs;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BaseFragment;
-import org.telegram.ui.Components.AlertsCreator;
+
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.UpdateAppAlertDialog;
@@ -30,8 +25,6 @@ import org.telegram.ui.IUpdateLayout;
 import org.telegram.ui.LaunchActivity;
 import org.telegram.ui.SMSStatsActivity;
 import org.telegram.ui.SMSSubscribeSheet;
-
-import java.io.File;
 
 public class ApplicationLoaderImpl extends ApplicationLoader {
     @Override
@@ -62,40 +55,17 @@ public class ApplicationLoaderImpl extends ApplicationLoader {
 
     }
 
+
     @Override
     public boolean checkApkInstallPermissions(final Context context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ApplicationLoader.applicationContext.getPackageManager().canRequestPackageInstalls()) {
-            AlertsCreator.createApkRestrictedDialog(context, null).show();
-            return false;
-        }
+        // Self-update is disabled in Moagram; REQUEST_INSTALL_PACKAGES permission removed.
         return true;
     }
 
     @Override
     public boolean openApkInstall(Activity activity, TLRPC.Document document) {
-        boolean exists = false;
-        try {
-            String fileName = FileLoader.getAttachFileName(document);
-            File f = FileLoader.getInstance(UserConfig.selectedAccount).getPathToAttach(document, true);
-            if (exists = f.exists()) {
-                Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
-                if (Build.VERSION.SDK_INT >= 24) {
-                    intent.setDataAndType(FileProvider.getUriForFile(activity, ApplicationLoader.getApplicationId() + ".provider", f), "application/vnd.android.package-archive");
-                } else {
-                    intent.setDataAndType(Uri.fromFile(f), "application/vnd.android.package-archive");
-                }
-                try {
-                    activity.startActivityForResult(intent, 500);
-                } catch (Exception e) {
-                    FileLog.e(e);
-                }
-            }
-        } catch (Exception e) {
-            FileLog.e(e);
-        }
-        return exists;
+        // Self-update is disabled in Moagram; REQUEST_INSTALL_PACKAGES permission removed.
+        return false;
     }
 
     @Override

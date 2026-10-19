@@ -339,7 +339,7 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
         telegramLogoView.setColorFilter(getTextLogoColor(), PorterDuff.Mode.MULTIPLY);
         telegramLogoView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         telegramLogoView.setFocusableInTouchMode(true);
-        addView(telegramLogoView, LayoutHelper.createFrame(90, 22));
+        addView(telegramLogoView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 22));
 
         statusDrawable = new AnimatedEmojiDrawable.SwapAnimatedEmojiDrawable(null, dp(26));
         statusDrawable.center = true;
@@ -589,19 +589,20 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
         oldMiniItems.clear();
         oldMiniItems.addAll(miniItems);
         items.clear();
-        if (type != TYPE_ARCHIVE) {
-            items.add(new Item(UserConfig.getInstance(currentAccount).getClientUserId()));
+        long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
+        if (type != TYPE_ARCHIVE && isDialogVisible(selfId)) {
+            items.add(new Item(selfId));
         }
 
         ArrayList<TL_stories.PeerStories> allStories = type == TYPE_ARCHIVE ? storiesController.getHiddenList() : storiesController.getDialogListStories();
         for (int i = 0; i < allStories.size(); i++) {
             long dialogId = DialogObject.getPeerDialogId(allStories.get(i).peer);
-            if (dialogId != UserConfig.getInstance(currentAccount).getClientUserId()) {
+            if (dialogId != selfId && isDialogVisible(dialogId)) {
                 items.add(new Item(dialogId));
             }
         }
         int size = items.size();
-        if (!storiesController.hasSelfStories()) {
+        if (isDialogVisible(selfId) && !storiesController.hasSelfStories()) {
             size--;
         }
         int totalCount;
@@ -669,6 +670,22 @@ public class DialogStoriesCell extends FrameLayout implements NotificationCenter
 
         oldItems.clear();
         invalidate();
+    }
+
+    protected boolean isDialogVisible(long dialogId) {
+        return true;
+    }
+
+    public boolean hasVisibleStories() {
+        ArrayList<TL_stories.PeerStories> allStories = type == TYPE_ARCHIVE
+                ? storiesController.getHiddenList()
+                : storiesController.getDialogListStories();
+        for (int i = 0; i < allStories.size(); i++) {
+            if (isDialogVisible(DialogObject.getPeerDialogId(allStories.get(i).peer))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean shouldDrawSelfInMini() {

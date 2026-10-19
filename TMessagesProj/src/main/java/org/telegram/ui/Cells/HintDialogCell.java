@@ -234,7 +234,7 @@ public class HintDialogCell extends FrameLayout {
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
         boolean result = super.drawChild(canvas, child, drawingTime);
         if (child == imageView) {
-            boolean showOnline = !premiumBlocked && currentUser != null && !currentUser.bot && (currentUser.status != null && currentUser.status.expires > ConnectionsManager.getInstance(currentAccount).getCurrentTime() || MessagesController.getInstance(currentAccount).onlinePrivacy.containsKey(currentUser.id));
+            boolean showOnline = !premiumBlocked && currentUser != null && !currentUser.bot && (currentUser.status != null && (currentUser.status instanceof TLRPC.TL_userStatusOnline || currentUser.status.expires > ConnectionsManager.getInstance(currentAccount).getCurrentTime()) || MessagesController.getInstance(currentAccount).onlinePrivacy.containsKey(currentUser.id));
             if (!wasDraw) {
                 showOnlineProgress = showOnline ? 1f : 0f;
             }

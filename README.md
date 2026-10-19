@@ -1,7 +1,27 @@
-## Telegram messenger for Android
+## Moagram for Android
+
+Moagram is an unofficial Android client based on [Telegram for Android](https://github.com/DrKLO/Telegram). It includes custom branding, privacy controls, hidden chats, and repeating scheduled messages.
+
+Repeats keep up to seven future occurrences queued for each rule. The app replenishes the queue when it runs and connects; open it regularly to keep repeats going. Manage Repeats in the chat menu lets you pause or stop a rule.
+
+### Building Moagram standalone
+
+Copy `local.properties.example` to `local.properties`, set your Android SDK path and your own Telegram API ID/hash, and configure your signing key. The local settings file, personal keystore, and APKs are ignored by Git. Back up the signing key and its passwords securely: updates to an existing installation require the same key.
+
+Build with the Android SDK/NDK versions listed below and JDK 17:
+
+```bash
+./gradlew :TMessagesProj_AppStandalone:assembleAfatStandalone
+```
+
+The standalone app uses package `org.moagram.messenger.web`. APKs are generated under `TMessagesProj_AppStandalone/build/outputs/apk/afat/standalone/`. See [repeat tests](Tools/tests/local-repeats.md) for verification instructions.
+
+The original Telegram attribution and development notes follow. For Moagram, use `local.properties` for API credentials and standalone signing instead of putting personal credentials in source files. Firebase configuration is inherited from upstream; configure your own project before distributing builds.
+
+## Telegram messenger for Android (upstream)
 
 [Telegram](https://telegram.org) is a messaging app with a focus on speed and security. It’s superfast, simple and free.
-This repo contains the official source code for [Telegram App for Android](https://play.google.com/store/apps/details?id=org.telegram.messenger).
+The upstream repository contains the official source code for [Telegram App for Android](https://play.google.com/store/apps/details?id=org.telegram.messenger).
 
 ## Creating your Telegram Application
 

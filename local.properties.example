@@ -1,0 +1,9 @@
+# Copy this file to local.properties and supply your own local values.
+sdk.dir=/path/to/Android/Sdk
+MOAGRAM_APP_ID=0
+MOAGRAM_APP_HASH=replace_with_your_api_hash
+# Keep the existing key when building updates for an installed Moagram app.
+MOAGRAM_KEYSTORE_FILE=TMessagesProj/config/moagram_release.keystore
+MOAGRAM_STORE_PASSWORD=replace_with_your_store_password
+MOAGRAM_KEY_ALIAS=moagram
+MOAGRAM_KEY_PASSWORD=replace_with_your_key_password

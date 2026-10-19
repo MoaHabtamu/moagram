@@ -1452,7 +1452,20 @@ public class LocaleController {
         if (value == null) {
             value = "LOC_ERR:" + key;
         }
-        return value;
+        return sanitizeMoagram(value);
+    }
+
+    public static String sanitizeMoagram(String text) {
+        if (text == null) {
+            return null;
+        }
+        if (text.contains("Telegram")) {
+            text = text.replace("Telegram", "Moagram");
+        }
+        if (text.contains("TELEGRAM")) {
+            text = text.replace("TELEGRAM", "MOAGRAM");
+        }
+        return text;
     }
 
     public static String getServerString(String key) {
@@ -1463,7 +1476,7 @@ public class LocaleController {
                 value = ApplicationLoader.applicationContext.getString(resourceId);
             }
         }
-        return value;
+        return sanitizeMoagram(value);
     }
 
     public static String getString(@StringRes int res) {
@@ -1623,9 +1636,9 @@ public class LocaleController {
                 a[i] = i == 0 ? stringBuilder : args[i - 1];
             }
             if (getInstance().currentLocale != null) {
-                return String.format(getInstance().currentLocale, value, a);
+                return sanitizeMoagram(String.format(getInstance().currentLocale, value, a));
             } else {
-                return String.format(value, a);
+                return sanitizeMoagram(String.format(value, a));
             }
         } catch (Exception e) {
             FileLog.e(e);
@@ -1694,9 +1707,9 @@ public class LocaleController {
             }
 
             if (getInstance().currentLocale != null) {
-                return String.format(getInstance().currentLocale, value, args);
+                return sanitizeMoagram(String.format(getInstance().currentLocale, value, args));
             } else {
-                return String.format(value, args);
+                return sanitizeMoagram(String.format(value, args));
             }
         } catch (Exception e) {
             FileLog.e(e);
@@ -1742,6 +1755,7 @@ public class LocaleController {
                 }
             }
 
+            value = sanitizeMoagram(value);
             SpannableStringBuilder builder = new SpannableStringBuilder(value);
             for (int i = 0; i < args.length; i++) {
                 String formatter = "s";
@@ -3022,11 +3036,11 @@ public class LocaleController {
                 return getString("Online", R.string.Online);
             }
         }
-        if (user == null || user.status == null || user.status.expires == 0 || UserObject.isDeleted(user) || user instanceof TLRPC.TL_userEmpty) {
+        if (user == null || user.status == null || (user.status.expires == 0 && !(user.status instanceof TLRPC.TL_userStatusOnline)) || UserObject.isDeleted(user) || user instanceof TLRPC.TL_userEmpty) {
             return getString("ALongTimeAgo", R.string.ALongTimeAgo);
         } else {
             int currentTime = ConnectionsManager.getInstance(currentAccount).getCurrentTime();
-            if (user.status.expires > currentTime) {
+            if (user.status instanceof TLRPC.TL_userStatusOnline || user.status.expires > currentTime) {
                 if (isOnline != null) {
                     isOnline[0] = true;
                 }

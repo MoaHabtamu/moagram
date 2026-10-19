@@ -1837,6 +1837,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     public final TransitionParams transitionParams = new TransitionParams();
     private boolean edited;
+    public boolean isEdited() {
+        return edited;
+    }
     private boolean imageDrawn;
     private boolean photoImageOutOfBounds;
 
@@ -4178,7 +4181,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
     }
 
     private boolean checkDateMotionEvent(MotionEvent event) {
-        if (!currentMessageObject.isImportedForward()) {
+        if (!currentMessageObject.isImportedForward() && !(edited && SharedConfig.saveEditHistory)) {
             return false;
         }
         int x = (int) getEventX(event);
@@ -6960,7 +6963,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 drawSideButton = checkNeedDrawShareButton(messageObject) ? 2 : 0;
             } else if (messageObject.searchType == ChatActivity.SEARCH_MY_MESSAGES) {
                 drawSideButton = 0;
-            } else if (MessagesController.getInstance(currentAccount).isPeerNoForwards(messageObject.getDialogId()) || (messageObject.messageOwner != null && messageObject.messageOwner.noforwards)) {
+            } else if (!SharedConfig.allowSaveRestrictedMedia && (MessagesController.getInstance(currentAccount).isPeerNoForwards(messageObject.getDialogId()) || (messageObject.messageOwner != null && messageObject.messageOwner.noforwards))) {
                 drawSideButton = 0;
                 if (isPinnedChat && !isRepliesChat && !messageObject.isSponsored()) {
                     if (currentMessagesGroup != null && currentPosition != null) {
@@ -12057,9 +12060,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             Window window = activity == null ? null : activity.getWindow();
             if (window != null) {
                 flagSecure = new FlagSecureReason(window, () ->
-                    currentMessageObject != null && currentMessageObject.messageOwner != null && (
+                    !SharedConfig.allowSaveRestrictedMedia && currentMessageObject != null && currentMessageObject.messageOwner != null && (
                         currentMessageObject.type == MessageObject.TYPE_PAID_MEDIA && (groupMedia == null || !groupMedia.hidden) ||
-                        currentMessageObject.messageOwner.noforwards && !currentMessageObject.isEphemeral() ||
+                        (currentMessageObject.messageOwner.noforwards && !currentMessageObject.isEphemeral()) ||
                         currentMessageObject.isVoiceOnce() ||
                         currentMessageObject.hasRevealedExtendedMedia()
                     )
@@ -12610,7 +12613,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
 
     @Override
     public boolean isSeekBarDragAllowed() {
-        return currentMessageObject == null || !currentMessageObject.isVoiceOnce();
+        return currentMessageObject == null || !currentMessageObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia;
     }
 
     @Override
@@ -18476,6 +18479,9 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
         }
         if (currentMessageObject.messageOwner.video_processing_pending) {
             timeString = formatString(R.string.ScheduledTimeApprox, timeString);
+        }
+        if (currentMessageObject.wasDeleted || messageObject.wasDeleted) {
+            timeString = "🗑 " + timeString;
         }
         if (signString != null) {
             if (messageObject.messageOwner.via_business_bot_id != 0) {

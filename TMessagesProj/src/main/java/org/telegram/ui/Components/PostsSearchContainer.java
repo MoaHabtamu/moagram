@@ -26,11 +26,13 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
@@ -273,6 +275,18 @@ public class PostsSearchContainer extends FrameLayout {
                 final ArrayList<MessageObject> messages = news ? newsMessages : this.messages;
                 final boolean firstMessages = messages.isEmpty();
                 for (TLRPC.Message message : r.messages) {
+                    long did = MessageObject.getDialogId(message);
+                    if (SharedConfig.searchHideJoined) {
+                        if (did < 0) {
+                            TLRPC.Chat chat = messagesController.getChat(-did);
+                            if (chat != null && !ChatObject.isNotInChat(chat)) {
+                                continue;
+                            }
+                        }
+                        if (messagesController.dialogs_dict.get(did) != null) {
+                            continue;
+                        }
+                    }
                     final MessageObject msg = new MessageObject(currentAccount, message, false, false);
                     if (!news) {
                         msg.setQuery(req.query);

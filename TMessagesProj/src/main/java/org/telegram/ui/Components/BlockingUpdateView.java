@@ -280,6 +280,10 @@ public class BlockingUpdateView extends FrameLayout implements NotificationCente
     }
 
     public void show(int account, TLRPC.TL_help_appUpdate update, boolean check) {
+        if (!BuildVars.CHECK_UPDATES) {
+            setVisibility(GONE);
+            return;
+        }
         pressCount = 0;
         appUpdate = update;
         accountNum = account;

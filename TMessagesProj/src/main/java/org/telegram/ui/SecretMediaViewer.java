@@ -68,7 +68,16 @@ import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import java.io.FileOutputStream;
+
+import org.telegram.messenger.MediaController;
+import org.telegram.messenger.secretmedia.EncryptedFileInputStream;
+import org.telegram.ui.ActionBar.ActionBarMenu;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
+import org.telegram.ui.Components.BulletinFactory;
 
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ExoPlayer;
@@ -485,6 +494,9 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
             }
             ArrayList<Integer> markAsDeletedMessages = (ArrayList<Integer>) args[0];
             if (markAsDeletedMessages.contains(currentMessageObject.getId())) {
+                if (SharedConfig.keepSelfDestructingMedia) {
+                    return;
+                }
                 if (isVideo && !videoWatchedOneTime) {
                     closeVideoAfterWatch = true;
                 } else {
@@ -517,6 +529,9 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
         } else if (id == NotificationCenter.updateMessageMedia) {
             TLRPC.Message message = (TLRPC.Message) args[0];
             if (currentMessageObject.getId() == message.id) {
+                if (SharedConfig.keepSelfDestructingMedia) {
+                    return;
+                }
                 if (isVideo && !videoWatchedOneTime) {
                     closeVideoAfterWatch = true;
                 } else {
@@ -599,7 +614,7 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
                         isPlaying = false;
                         if (playbackState == ExoPlayer.STATE_ENDED) {
                             videoWatchedOneTime = true;
-                            if (closeVideoAfterWatch) {
+                            if (closeVideoAfterWatch && !SharedConfig.keepSelfDestructingMedia) {
                                 closePhoto(true, !ignoreDelete);
                             } else {
                                 videoPlayer.seekTo(0);
@@ -865,13 +880,21 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
         actionBar.setItemsBackgroundColor(Theme.ACTION_BAR_WHITE_SELECTOR_COLOR, false);
         actionBar.setItemsColor(Color.WHITE, false);
         actionBar.setBackButtonImage(R.drawable.ic_ab_back);
-        actionBar.setTitleRightMargin(dp(70));
+        actionBar.setTitleRightMargin(dp(110));
         containerView.addView(actionBar, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+        ActionBarMenu menu = actionBar.createMenu();
+        ActionBarMenuItem downloadItem = menu.addItem(1, R.drawable.msg_download);
+        downloadItem.setContentDescription(LocaleController.getString(R.string.SaveToGallery));
+        menu.addView(new View(activity), new LinearLayout.LayoutParams(dp(56), ViewGroup.LayoutParams.MATCH_PARENT));
+
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(int id) {
                 if (id == -1) {
                     closePhoto(true, false);
+                } else if (id == 1) {
+                    saveCurrentMedia();
                 }
             }
         });
@@ -967,8 +990,10 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
                 WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR |
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
                 WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS;
-        windowLayoutParams.flags |= WindowManager.LayoutParams.FLAG_SECURE;
-        AndroidUtilities.logFlagSecure();
+        if (!SharedConfig.allowSaveRestrictedMedia) {
+            windowLayoutParams.flags |= WindowManager.LayoutParams.FLAG_SECURE;
+            AndroidUtilities.logFlagSecure();
+        }
         centerImage.setParentView(containerView);
         centerImage.setForceCrossfade(true);
 
@@ -1980,7 +2005,7 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
             return false;
         }
 
-        if (ignoreDelete && byDelete) {
+        if (byDelete && (ignoreDelete || SharedConfig.keepSelfDestructingMedia)) {
             return false;
         }
 
@@ -2740,5 +2765,92 @@ public class SecretMediaViewer implements NotificationCenter.NotificationCenterD
             captionTextViewSwitcher.getCurrentView().setLayerType(View.LAYER_TYPE_HARDWARE, null);
             captionTextViewSwitcher.getNextView().setLayerType(View.LAYER_TYPE_HARDWARE, null);
         }
+    }
+
+    private void saveCurrentMedia() {
+        if (parentActivity == null || currentMessageObject == null) {
+            return;
+        }
+        File f = null;
+        if (isVideo) {
+            if (currentMessageObject.messageOwner.attachPath != null) {
+                f = new File(currentMessageObject.messageOwner.attachPath);
+            }
+            if (f == null || !f.exists()) {
+                f = FileLoader.getInstance(currentAccount).getPathToMessage(currentMessageObject.messageOwner);
+            }
+            if (f != null && !f.exists()) {
+                File encryptedFile = new File(f.getAbsolutePath() + ".enc");
+                if (encryptedFile.exists()) {
+                    f = encryptedFile;
+                }
+            }
+        } else {
+            TLRPC.PhotoSize sizeFull = FileLoader.getClosestPhotoSizeWithSize(currentMessageObject.photoThumbs, AndroidUtilities.getPhotoSize());
+            if (sizeFull != null) {
+                f = FileLoader.getInstance(currentAccount).getPathToAttach(sizeFull, true);
+            }
+            if (f == null || !f.exists()) {
+                f = FileLoader.getInstance(currentAccount).getPathToMessage(currentMessageObject.messageOwner);
+            }
+            if (f != null && !f.exists()) {
+                File encryptedFile = new File(f.getAbsolutePath() + ".enc");
+                if (encryptedFile.exists()) {
+                    f = encryptedFile;
+                } else {
+                    f = new File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), f.getName());
+                }
+            }
+        }
+
+        if (f == null || !f.exists()) {
+            if (!isVideo && centerImage != null && centerImage.getBitmap() != null) {
+                try {
+                    File savedPhoto = new File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), "saved_photo_" + currentMessageObject.getId() + ".jpg");
+                    FileOutputStream os = new FileOutputStream(savedPhoto);
+                    centerImage.getBitmap().compress(Bitmap.CompressFormat.JPEG, 90, os);
+                    os.close();
+                    MediaController.saveFile(savedPhoto.toString(), parentActivity, 0, null, null, uri -> {
+                        if (containerView != null) {
+                            BulletinFactory.createSaveToGalleryBulletin(containerView, false, 0xf9222222, 0xffffffff).show();
+                        }
+                    });
+                } catch (Exception e) {
+                    FileLog.e(e);
+                }
+            }
+            return;
+        }
+
+        File targetFile = f;
+        if (f.getName().endsWith(".enc")) {
+            File keyPath = new File(FileLoader.getInternalCacheDir(), f.getName() + ".key");
+            if (!keyPath.exists()) {
+                keyPath = new File(FileLoader.getInternalCacheDir(), f.getName().replace(".enc", "") + ".enc.key");
+            }
+            if (keyPath.exists()) {
+                try {
+                    File decryptedFile = new File(FileLoader.getDirectory(FileLoader.MEDIA_DIR_CACHE), "saved_media_" + currentMessageObject.getId() + (isVideo ? ".mp4" : ".jpg"));
+                    EncryptedFileInputStream is = new EncryptedFileInputStream(f, keyPath);
+                    FileOutputStream os = new FileOutputStream(decryptedFile);
+                    byte[] buf = new byte[4096];
+                    int len;
+                    while ((len = is.read(buf)) > 0) {
+                        os.write(buf, 0, len);
+                    }
+                    is.close();
+                    os.close();
+                    targetFile = decryptedFile;
+                } catch (Exception e) {
+                    FileLog.e(e);
+                }
+            }
+        }
+
+        MediaController.saveFile(targetFile.toString(), parentActivity, isVideo ? 1 : 0, null, null, uri -> {
+            if (containerView != null) {
+                BulletinFactory.createSaveToGalleryBulletin(containerView, isVideo, 0xf9222222, 0xffffffff).show();
+            }
+        });
     }
 }

@@ -269,7 +269,7 @@ public class UserCell2 extends FrameLayout {
                     statusTextView.setText(LocaleController.getString(R.string.BotStatusCantRead));
                 }
             } else {
-                if (currentUser.id == UserConfig.getInstance(currentAccount).getClientUserId() || currentUser.status != null && currentUser.status.expires > ConnectionsManager.getInstance(currentAccount).getCurrentTime() || MessagesController.getInstance(currentAccount).onlinePrivacy.containsKey(currentUser.id)) {
+                if (currentUser.id == UserConfig.getInstance(currentAccount).getClientUserId() || currentUser.status != null && (currentUser.status instanceof TLRPC.TL_userStatusOnline || currentUser.status.expires > ConnectionsManager.getInstance(currentAccount).getCurrentTime()) || MessagesController.getInstance(currentAccount).onlinePrivacy.containsKey(currentUser.id)) {
                     statusTextView.setTextColor(statusOnlineColor);
                     statusTextView.setText(LocaleController.getString(R.string.Online));
                 } else {

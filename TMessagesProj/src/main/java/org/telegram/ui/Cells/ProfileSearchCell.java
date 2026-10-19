@@ -662,7 +662,7 @@ public class ProfileSearchCell extends BaseCell implements NotificationCenter.No
                     if (isOnline[0]) {
                         currentStatusPaint = Theme.dialogs_onlinePaint;
                     }
-                    if (user != null && (user.id == UserConfig.getInstance(currentAccount).getClientUserId() || user.status != null && user.status.expires > ConnectionsManager.getInstance(currentAccount).getCurrentTime())) {
+                    if (user != null && (user.id == UserConfig.getInstance(currentAccount).getClientUserId() || user.status != null && (user.status instanceof TLRPC.TL_userStatusOnline || user.status.expires > ConnectionsManager.getInstance(currentAccount).getCurrentTime()))) {
                         currentStatusPaint = Theme.dialogs_onlinePaint;
                         statusString = getString(R.string.Online);
                     }

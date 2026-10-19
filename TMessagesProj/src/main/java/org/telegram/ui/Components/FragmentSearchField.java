@@ -534,4 +534,8 @@ public class FragmentSearchField extends FrameLayout implements FactorAnimator.T
         }
         searchFilterLayout.setTag(visible ? 1 : null);
     }
+
+    public ImageView getSearchIcon() {
+        return searchIcon;
+    }
 }

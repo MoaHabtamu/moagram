@@ -73,6 +73,8 @@ import org.telegram.messenger.ChatThemeController;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.GhostModeController;
+import org.telegram.messenger.HiddenChatsController;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.LiteMode;
@@ -97,6 +99,7 @@ import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.INavigationLayout;
 import org.telegram.ui.ActionBar.SimpleTextView;
 import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Cells.CheckBoxCell;
 import org.telegram.ui.Cells.SettingsSearchCell;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.AnimatedEmojiDrawable;
@@ -691,6 +694,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         items.add(SettingCell.Factory.of(1, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.settings_account, getString(R.string.SettingsAccount), getString(R.string.SettingsAccountInfo)));
         items.add(SettingCell.Factory.of(2, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_chat, getString(R.string.SettingsChat), getString(R.string.SettingsChatInfo)));
         items.add(SettingCell.Factory.of(3, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_privacy, getString(R.string.SettingsPrivacySecurity), getString(R.string.SettingsPrivacySecurityInfo)));
+        items.add(SettingCell.Factory.of(4, IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom, R.drawable.msg_stories_stealth, getString(R.string.GhostMode), GhostModeController.getInstance(currentAccount).enabled ? getString(R.string.NotificationsOn) : getString(R.string.NotificationsOff)));
+        items.add(SettingCell.Factory.of(24, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.msg_secret, "Hidden Chats", getHiddenChatsOpeningLocation()));
+        items.add(SettingCell.Factory.of(25, IconBackgroundColors.BLUE_ALT.top, IconBackgroundColors.BLUE_ALT.bottom, R.drawable.outline_search_1_24, LocaleController.getString(R.string.SearchHideJoined), SharedConfig.searchHideJoined ? LocaleController.getString(R.string.NotificationsOn) : LocaleController.getString(R.string.NotificationsOff)));
         items.add(SettingCell.Factory.of(5, IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom, R.drawable.settings_sounds, getString(R.string.SettingsNotifications), getString(R.string.SettingsNotificationsInfo)));
         items.add(SettingCell.Factory.of(6, IconBackgroundColors.BLUE_DEEP.top, IconBackgroundColors.BLUE_DEEP.bottom, R.drawable.settings_data, getString(R.string.SettingsData), getString(R.string.SettingsDataInfo)));
         items.add(SettingCell.Factory.of(7, IconBackgroundColors.BLUE_ALT.top, IconBackgroundColors.BLUE_ALT.bottom, R.drawable.settings_folders, getString(R.string.SettingsFolders), getString(R.string.SettingsFoldersInfo)));
@@ -818,6 +824,22 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             case 3:
                 presentSettingFragment(new PrivacySettingsActivity());
                 break;
+            case 4:
+                presentSettingFragment(new GhostModeActivity());
+                break;
+            case 24:
+                showHiddenChatsSettings();
+                break;
+            case 25:
+                SharedConfig.toggleSearchHideJoined();
+                if (listView != null && listView.adapter != null) {
+                    listView.adapter.update(true);
+                }
+                BulletinFactory.of(this).createSimpleBulletin(
+                    R.drawable.outline_search_1_24,
+                    SharedConfig.searchHideJoined ? LocaleController.getString(R.string.SearchHideJoinedBulletinOn) : LocaleController.getString(R.string.SearchHideJoinedBulletinOff)
+                ).show();
+                break;
             case 5:
                 presentSettingFragment(new NotificationsSettingsActivity());
                 break;
@@ -881,6 +903,219 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 break;
             }
         }
+    }
+
+    private String getHiddenChatsOpeningLocation() {
+        HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+        ArrayList<String> names = new ArrayList<>();
+        if (controller.opensFromSearch()) names.add("Search icon");
+        if (controller.opensFromTitle()) names.add("App title");
+        if (controller.opensFromDoubleTapTitle()) names.add("Double-tap title");
+        if (controller.opensFromAllTab()) names.add("'All' tab");
+        if (controller.opensFromButton()) names.add("Top button");
+        if (controller.opensFromMenu()) names.add("Menu icon");
+        if (names.isEmpty()) {
+            return "Tap & hold search icon";
+        }
+        if (names.size() >= 5) {
+            return "All triggers";
+        }
+        return TextUtils.join(", ", names);
+    }
+
+    private void showHiddenChatsSettings() {
+        HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+        String passcodeStatus = controller.isUseTelegramPasscode() ? "Telegram Lock Passcode" : "Separate PIN";
+        CharSequence[] options = new CharSequence[] {
+                "Open Hidden Chats",
+                "Configure Opening Triggers (" + getHiddenChatsOpeningLocation() + ")",
+                "Passcode Protection (" + passcodeStatus + ")",
+                "Change Hidden Chats PIN",
+                controller.isHideNotifications() ? "Show Notifications" : "Hide Notifications",
+                controller.isDisguiseNotifications() ? "Disable Disguised Notifications" : "Enable Disguised Notifications"
+        };
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), resourceProvider);
+        builder.setTitle("Hidden Chats");
+        builder.setItems(options, (dialog, which) -> {
+            if (which == 0) {
+                openHiddenChatsFromSettings();
+            } else if (which == 1) {
+                showOpeningTriggersDialog();
+            } else if (which == 2) {
+                showPasscodeModeDialog();
+            } else if (which == 3) {
+                changeHiddenChatsPin();
+            } else if (which == 4) {
+                controller.setHideNotifications(!controller.isHideNotifications());
+                if (listView != null) {
+                    listView.adapter.update(true);
+                }
+            } else if (which == 5) {
+                controller.setDisguiseNotifications(!controller.isDisguiseNotifications());
+                if (listView != null) {
+                    listView.adapter.update(true);
+                }
+            }
+        });
+        showDialog(builder.create());
+    }
+
+    private void showPasscodeModeDialog() {
+        HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+        CharSequence[] items = new CharSequence[] {
+                "Use Telegram Lock Passcode",
+                "Use Custom PIN for Hidden Chats"
+        };
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), resourceProvider);
+        builder.setTitle("Hidden Chats Passcode");
+        builder.setItems(items, (dialog, which) -> {
+            if (which == 0) {
+                if (SharedConfig.passcodeHash.isEmpty()) {
+                    AlertDialog.Builder alert = new AlertDialog.Builder(getParentActivity(), resourceProvider);
+                    alert.setTitle("Telegram App Lock");
+                    alert.setMessage("Telegram lock passcode is not configured yet. Would you like to set a passcode now?");
+                    alert.setPositiveButton("Set Passcode", (d, w) -> {
+                        PasscodeActivity passcodeActivity = new PasscodeActivity(PasscodeActivity.TYPE_SETUP_CODE);
+                        passcodeActivity.setOnPasscodeSuccess(() -> {
+                            controller.setUseTelegramPasscode(true);
+                            BulletinFactory.of(SettingsActivity.this).createSimpleBulletin(R.drawable.msg_secret, "Hidden chats now protected by Telegram lock passcode.").show();
+                        });
+                        presentFragment(passcodeActivity);
+                    });
+                    alert.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+                    showDialog(alert.create());
+                } else {
+                    controller.setUseTelegramPasscode(true);
+                    BulletinFactory.of(SettingsActivity.this).createSimpleBulletin(R.drawable.msg_secret, "Using Telegram lock passcode for hidden chats.").show();
+                }
+            } else if (which == 1) {
+                if (controller.hasCustomPasscode()) {
+                    controller.setUseTelegramPasscode(false);
+                    BulletinFactory.of(SettingsActivity.this).createSimpleBulletin(R.drawable.msg_secret, "Using custom PIN for hidden chats.").show();
+                } else {
+                    PasscodeActivity passcodeActivity = new PasscodeActivity(PasscodeActivity.TYPE_SETUP_CODE)
+                            .setForHiddenChats(true);
+                    passcodeActivity.setOnPasscodeSuccess(() -> {
+                        BulletinFactory.of(SettingsActivity.this).createSimpleBulletin(R.drawable.msg_secret, "Custom PIN set for hidden chats.").show();
+                    });
+                    presentFragment(passcodeActivity);
+                }
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        showDialog(builder.create());
+    }
+
+    private void changeHiddenChatsPin() {
+        HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+        if (controller.isPasscodeSet()) {
+            PasscodeActivity enterActivity = new PasscodeActivity(PasscodeActivity.TYPE_ENTER_CODE_TO_MANAGE_SETTINGS)
+                    .setForHiddenChats(true);
+            enterActivity.setOnPasscodeSuccess(() -> {
+                PasscodeActivity setupActivity = new PasscodeActivity(PasscodeActivity.TYPE_SETUP_CODE)
+                        .setForHiddenChats(true);
+                setupActivity.setOnPasscodeSuccess(() -> {
+                    BulletinFactory.of(SettingsActivity.this).createSimpleBulletin(R.drawable.msg_secret, "Hidden chats PIN updated.").show();
+                });
+                presentFragment(setupActivity);
+            });
+            presentFragment(enterActivity);
+        } else {
+            PasscodeActivity setupActivity = new PasscodeActivity(PasscodeActivity.TYPE_SETUP_CODE)
+                    .setForHiddenChats(true);
+            setupActivity.setOnPasscodeSuccess(() -> {
+                BulletinFactory.of(SettingsActivity.this).createSimpleBulletin(R.drawable.msg_secret, "Hidden chats PIN created.").show();
+            });
+            presentFragment(setupActivity);
+        }
+    }
+
+    private void showOpeningTriggersDialog() {
+        HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+        CharSequence[] triggers = new CharSequence[] {
+                "Tap & hold search icon",
+                "Long-press app title",
+                "Double-tap app title",
+                "Long-press 'All Chats' tab",
+                "Top-bar lock button",
+                "Long-press menu icon"
+        };
+        int[] flags = new int[] {
+                HiddenChatsController.FLAG_OPEN_SEARCH,
+                HiddenChatsController.FLAG_OPEN_TITLE,
+                HiddenChatsController.FLAG_OPEN_DOUBLE_TAP,
+                HiddenChatsController.FLAG_OPEN_ALL_TAB,
+                HiddenChatsController.FLAG_OPEN_BUTTON,
+                HiddenChatsController.FLAG_OPEN_MENU
+        };
+        boolean[] checked = new boolean[] {
+                controller.opensFromSearch(),
+                controller.opensFromTitle(),
+                controller.opensFromDoubleTapTitle(),
+                controller.opensFromAllTab(),
+                controller.opensFromButton(),
+                controller.opensFromMenu()
+        };
+
+        Context context = getParentActivity();
+        if (context == null) {
+            return;
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(context, resourceProvider);
+        builder.setTitle("Opening Triggers");
+
+        LinearLayout linearLayout = new LinearLayout(context);
+        linearLayout.setOrientation(LinearLayout.VERTICAL);
+
+        CheckBoxCell[] cells = new CheckBoxCell[triggers.length];
+        for (int i = 0; i < triggers.length; i++) {
+            final int index = i;
+            cells[i] = new CheckBoxCell(context, 1, resourceProvider);
+            cells[i].setBackgroundDrawable(Theme.getSelectorDrawable(false));
+            cells[i].setText(triggers[i], "", checked[i], false);
+            cells[i].setPadding(LocaleController.isRTL ? AndroidUtilities.dp(16) : AndroidUtilities.dp(8), 0, LocaleController.isRTL ? AndroidUtilities.dp(8) : AndroidUtilities.dp(16), 0);
+            linearLayout.addView(cells[i], LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+            cells[i].setOnClickListener(v -> {
+                checked[index] = !checked[index];
+                cells[index].setChecked(checked[index], true);
+                controller.setOpenFlag(flags[index], checked[index]);
+                if (listView != null) {
+                    listView.adapter.update(true);
+                }
+            });
+        }
+
+        builder.setView(linearLayout);
+        builder.setPositiveButton(LocaleController.getString(R.string.OK), null);
+        builder.setNeutralButton("Select All", (dialog, which) -> {
+            for (int i = 0; i < flags.length; i++) {
+                checked[i] = true;
+                if (cells[i] != null) {
+                    cells[i].setChecked(true, true);
+                }
+                controller.setOpenFlag(flags[i], true);
+            }
+            if (listView != null) {
+                listView.adapter.update(true);
+            }
+        });
+        showDialog(builder.create());
+    }
+
+    private void openHiddenChatsFromSettings() {
+        HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+        PasscodeActivity passcodeActivity = new PasscodeActivity(
+                !controller.isPasscodeSet()
+                        ? PasscodeActivity.TYPE_SETUP_CODE
+                        : PasscodeActivity.TYPE_ENTER_CODE_TO_MANAGE_SETTINGS
+        );
+        passcodeActivity.setForHiddenChats(true);
+        passcodeActivity.setOnPasscodeSuccess(() -> {
+            Bundle args = new Bundle();
+            args.putBoolean("hidden_chats", true);
+            presentFragment(new DialogsActivity(args));
+        });
+        presentFragment(passcodeActivity);
     }
 
     private boolean onLongClick(UItem item, View view, int position, float x, float y) {

@@ -166,6 +166,8 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
     private ShareSearchAdapter searchAdapter;
     protected ArrayList<MessageObject> sendingMessageObjects;
     private String[] sendingText = new String[2];
+    private ArrayList<TLRPC.MessageEntity>[] sendingTextEntities = new ArrayList[2];
+    private boolean sendingTextLinkPreviewsEnabled = true;
     private int hasPoll;
     private StickerEmptyView searchEmptyView;
     private Drawable shadowDrawable;
@@ -525,7 +527,6 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
                 loadingLink = false;
             }));
         }
-
 
         sizeNotifierFrameLayout = new SizeNotifierFrameLayout(context) {
 
@@ -2548,7 +2549,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
                             if (frameLayout2.getTag() != null && commentTextView.length() > 0) {
                                 params = SendMessagesHelper.SendMessageParams.of(text[0] == null ? null : text[0].toString(), key, replyTopMsg, replyTopMsg, null, true, entities, null, null, withSound, 0, 0, null, false);
                             } else {
-                                params = SendMessagesHelper.SendMessageParams.of(sendingText[num], key, replyTopMsg, replyTopMsg, null, true, null, null, null, withSound, 0, 0, null, false);
+                                params = SendMessagesHelper.SendMessageParams.of(sendingText[num], key, replyTopMsg, replyTopMsg, null, sendingTextLinkPreviewsEnabled, sendingTextEntities != null ? sendingTextEntities[num] : null, null, null, withSound, 0, 0, null, false);
                             }
                         } else {
                             if (frameLayout2.getTag() != null && commentTextView.length() > 0 && text[0] != null) {
@@ -2577,7 +2578,7 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
                             params.monoForumPeer = monoForumPeerId;
                             SendMessagesHelper.getInstance(currentAccount).sendMessage(params);
                         }
-                        SendMessagesHelper.SendMessageParams params2 = SendMessagesHelper.SendMessageParams.of(sendingText[num], key, replyTopMsg, replyTopMsg, null, true, null, null, null, withSound, 0, 0, null, false);
+                        SendMessagesHelper.SendMessageParams params2 = SendMessagesHelper.SendMessageParams.of(sendingText[num], key, replyTopMsg, replyTopMsg, null, sendingTextLinkPreviewsEnabled, sendingTextEntities != null ? sendingTextEntities[num] : null, null, null, withSound, 0, 0, null, false);
                         params2.payStars = price == null ? 0 : price;
                         params2.monoForumPeer = monoForumPeerId;
                         SendMessagesHelper.getInstance(currentAccount).sendMessage(params2);
@@ -2591,6 +2592,25 @@ public class ShareAlert extends BottomSheet implements NotificationCenter.Notifi
             }
             dismiss();
         });
+    }
+
+    public void setSendingTextEntities(ArrayList<TLRPC.MessageEntity> entities) {
+        if (sendingTextEntities == null) {
+            sendingTextEntities = new ArrayList[2];
+        }
+        sendingTextEntities[0] = entities;
+    }
+
+    public void setSendingTextLinkPreviewsEnabled(boolean enabled) {
+        sendingTextLinkPreviewsEnabled = enabled;
+    }
+
+    public void setSendingTextEntities(ArrayList<TLRPC.MessageEntity> entities, ArrayList<TLRPC.MessageEntity> entities2) {
+        if (sendingTextEntities == null) {
+            sendingTextEntities = new ArrayList[2];
+        }
+        sendingTextEntities[0] = entities;
+        sendingTextEntities[1] = entities2;
     }
 
     protected void onSend(LongSparseArray<TLRPC.Dialog> dids, int count, TLRPC.TL_forumTopic topic, boolean showToast) {

@@ -42,6 +42,7 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.GhostModeController;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
@@ -95,6 +96,8 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
     private int phoneNumberRow;
     @Keep
     private int lastSeenRow;
+    @Keep
+    private int ghostModeRow;
     @Keep
     private int profilePhotoRow;
     @Keep
@@ -411,6 +414,8 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
                 showDialog(builder.create());
             } else if (position == lastSeenRow) {
                 presentFragment(new PrivacyControlActivity(ContactsController.PRIVACY_RULES_TYPE_LASTSEEN));
+            } else if (position == ghostModeRow) {
+                presentFragment(new GhostModeActivity());
             } else if (position == phoneNumberRow) {
                 presentFragment(new PrivacyControlActivity(ContactsController.PRIVACY_RULES_TYPE_PHONE));
             } else if (position == groupsRow) {
@@ -735,6 +740,7 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
         privacySectionRow = rowCount++;
         phoneNumberRow = rowCount++;
         lastSeenRow = rowCount++;
+        ghostModeRow = -1;
         profilePhotoRow = rowCount++;
         forwardsRow = rowCount++;
         callsRow = rowCount++;
@@ -1022,6 +1028,7 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
             int position = holder.getAdapterPosition();
             return position == passcodeRow || position == passwordRow || position == passkeysRow || position == blockedRow || position == sessionsRow || position == secretWebpageRow || position == webSessionsRow ||
                     position == groupsRow && !getContactsController().getLoadingPrivacyInfo(ContactsController.PRIVACY_RULES_TYPE_INVITE) ||
+                    position == ghostModeRow ||
                     position == lastSeenRow && !getContactsController().getLoadingPrivacyInfo(ContactsController.PRIVACY_RULES_TYPE_LASTSEEN) ||
                     position == callsRow && !getContactsController().getLoadingPrivacyInfo(ContactsController.PRIVACY_RULES_TYPE_CALLS) ||
                     position == profilePhotoRow && !getContactsController().getLoadingPrivacyInfo(ContactsController.PRIVACY_RULES_TYPE_PHOTO) ||
@@ -1101,6 +1108,8 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
                             value = formatRulesString(getAccountInstance(), ContactsController.PRIVACY_RULES_TYPE_LASTSEEN);
                         }
                         textCell.setTextAndValue(getString("PrivacyLastSeen", R.string.PrivacyLastSeen), value, true);
+                    } else if (position == ghostModeRow) {
+                        textCell.setTextAndValue(LocaleController.getString(R.string.GhostMode), GhostModeController.getInstance(currentAccount).enabled ? LocaleController.getString(R.string.NotificationsOn) : LocaleController.getString(R.string.NotificationsOff), true);
                     } else if (position == groupsRow) {
                         if (getContactsController().getLoadingPrivacyInfo(ContactsController.PRIVACY_RULES_TYPE_INVITE)) {
                             showLoading = true;
@@ -1389,7 +1398,7 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
 
         @Override
         public int getItemViewType(int position) {
-            if (position == passportRow || position == lastSeenRow || position == phoneNumberRow ||
+            if (position == passportRow || position == lastSeenRow || position == ghostModeRow || position == phoneNumberRow ||
                     position == deleteAccountRow || position == webSessionsRow || position == groupsRow || position == paymentsClearRow ||
                     position == secretMapRow || position == contactsDeleteRow || position == botsBiometryRow) {
                 return 0;

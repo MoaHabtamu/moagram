@@ -1775,7 +1775,7 @@ public class ContactsController extends BaseController {
         try {
             SharedPreferences preferences = MessagesController.getMainSettings(currentAccount);
             long lastReloadStatusTime = preferences.getLong("lastReloadStatusTime", 0);
-            if (lastReloadStatusTime < System.currentTimeMillis() - 1000 * 60 * 60 * 3 || force) {
+            if (lastReloadStatusTime < System.currentTimeMillis() - 1000 * 60 || force) {
                 reloadContactsStatuses();
             }
         } catch (Exception e) {
@@ -2623,6 +2623,7 @@ public class ContactsController extends BaseController {
                             if (user != null) {
                                 user.status = status.status;
                             }
+                            toDbUser.id = status.user_id;
                             toDbUser.status = status.status;
                             dbUsersStatus.add(toDbUser);
                         }

@@ -89,6 +89,7 @@ import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.LocalRepeatController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
@@ -289,7 +290,12 @@ public class AlertsCreator {
         if (error == null || error.code == 406 || error.text == null) {
             return null;
         }
-        if ("BALANCE_TOO_LOW".equalsIgnoreCase(error.text)) {
+        if (LocalRepeatController.UNSUPPORTED.equals(error.text) || "LOCAL_REPEAT_STORAGE_FAILED".equals(error.text)) {
+            BaseFragment target = fragment != null ? fragment : LaunchActivity.getSafeLastFragment();
+            showSimpleAlert(target, getString(R.string.LocalRepeatTitle), getString(LocalRepeatController.UNSUPPORTED.equals(error.text)
+                    ? R.string.LocalRepeatUnsupported : R.string.LocalRepeatStorageFailed));
+            return null;
+        } else if ("BALANCE_TOO_LOW".equalsIgnoreCase(error.text)) {
             final long price = StarsController.getAllowedPaidStars(request);
             final long dialogId = StarsController.getPeer(request);
             if (price > 0) {
@@ -4327,6 +4333,46 @@ public class AlertsCreator {
         }
     }
 
+    public static void showLocalRepeats(Context context, int account, long dialogId, Theme.ResourcesProvider resourcesProvider) {
+        LocalRepeatController controller = LocalRepeatController.getInstance(account);
+        ArrayList<LocalRepeatController.RepeatInfo> repeats = controller.getRepeats(dialogId);
+        if (repeats.isEmpty()) {
+            new AlertDialog.Builder(context, resourcesProvider).setTitle(getString(R.string.LocalRepeatTitle))
+                    .setMessage(getString(R.string.LocalRepeatEmpty)).setPositiveButton(getString(R.string.OK), null).show();
+            return;
+        }
+        CharSequence[] labels = new CharSequence[repeats.size()];
+        for (int i = 0; i < repeats.size(); i++) {
+            LocalRepeatController.RepeatInfo info = repeats.get(i);
+            String text = TextUtils.isEmpty(info.text) ? getString(R.string.LocalRepeatMedia) : info.text.replace('\n', ' ');
+            labels[i] = text.length() > 60 ? text.substring(0, 60) + "…" : text;
+        }
+        new AlertDialog.Builder(context, resourcesProvider).setTitle(getString(R.string.LocalRepeatTitle))
+                .setItems(labels, (dialog, which) -> {
+                    LocalRepeatController.RepeatInfo info = repeats.get(which);
+                    String interval = info.interval >= 86400 ? LocaleController.formatPluralString("Days", info.interval / 86400)
+                            : LocaleController.formatPluralString("Minutes", info.interval / 60);
+                    String details = LocaleController.formatString(R.string.LocalRepeatDetails, interval, info.queued);
+                    if (info.paused) details += "\n\n" + getString(R.string.LocalRepeatPaused);
+                    if (!TextUtils.isEmpty(info.error)) details += "\n\n" + LocaleController.formatString(R.string.LocalRepeatError, info.error);
+                    if (info.stopping) details += "\n\n" + getString(R.string.LocalRepeatStopping);
+                    AlertDialog.Builder builder = new AlertDialog.Builder(context, resourcesProvider)
+                            .setTitle(getString(R.string.LocalRepeatTitle)).setMessage(details)
+                            .setNegativeButton(getString(R.string.Close), null);
+                    if (!info.stopping) {
+                        builder.setPositiveButton(getString(R.string.LocalRepeatStop), (di, w) ->
+                                new AlertDialog.Builder(context, resourcesProvider).setTitle(getString(R.string.LocalRepeatStop))
+                                        .setMessage(getString(R.string.LocalRepeatStopConfirm))
+                                        .setPositiveButton(getString(R.string.LocalRepeatStop), (confirmation, button) -> controller.stop(info.id))
+                                        .setNegativeButton(getString(R.string.Cancel), null).show());
+                    }
+                    if (info.paused) {
+                        builder.setNeutralButton(getString(R.string.LocalRepeatRetry), (di, w) -> controller.retry(info.id));
+                    }
+                    builder.show();
+                }).setNegativeButton(getString(R.string.Close), null).show();
+    }
+
     public static BottomSheet.Builder createScheduleDatePickerDialog(Context context, long dialogId, final ScheduleDatePickerDelegate datePickerDelegate) {
         return createScheduleDatePickerDialog(context, dialogId, -1, datePickerDelegate, null);
     }
@@ -4368,6 +4414,7 @@ public class AlertsCreator {
             return null;
         }
         final int[] repeat = new int[] { currentRepeatPeriod };
+        final int scheduleAccount = UserConfig.selectedAccount;
 
         long selfUserId = UserConfig.getInstance(UserConfig.selectedAccount).getClientUserId();
 
@@ -4647,6 +4694,12 @@ public class AlertsCreator {
             repeatTextView.setPadding(dp(12), 0, dp(12), 0);
             repeatTextView.setBackground(Theme.createSimpleSelectorRoundRectDrawable(dp(14), backgroundColor, Theme.blendOver(backgroundColor, selectorColor)));
             repeatTextView.setGravity(Gravity.CENTER);
+            final TextView repeatInfo = new TextView(context);
+            repeatInfo.setText(getString(R.string.LocalRepeatInfo));
+            repeatInfo.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            repeatInfo.setTextColor(datePickerColors.textColor);
+            repeatInfo.setAlpha(0.7f);
+            repeatInfo.setGravity(Gravity.CENTER);
             updateRepeatText = () -> {
                 final SpannableStringBuilder sb = new SpannableStringBuilder();
                 sb.append(getString(R.string.MessageScheduledRepeatOption));
@@ -4660,25 +4713,31 @@ public class AlertsCreator {
                     }
                 }
                 sb.append(" v");
-                if (UserConfig.getInstance(UserConfig.selectedAccount).isPremium()) {
-                    final ColoredImageSpan imageSpan = new ColoredImageSpan(R.drawable.arrows_select);
-                    imageSpan.spaceScaleX = 0.7f;
-                    imageSpan.translate(dp(-1.33f), dp(0));
-                    imageSpan.setAlpha(0.75f);
-                    sb.setSpan(imageSpan, sb.length() - 1, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                } else {
-                    final ColoredImageSpan imageSpan = new ColoredImageSpan(R.drawable.mini_switch_lock);
-                    imageSpan.spaceScaleX = 0.7f;
-                    imageSpan.translate(dp(-1.33f), dp(0));
-                    imageSpan.setAlpha(0.75f);
-                    sb.setSpan(imageSpan, sb.length() - 1, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-                }
+                final ColoredImageSpan imageSpan = new ColoredImageSpan(R.drawable.arrows_select);
+                imageSpan.spaceScaleX = 0.7f;
+                imageSpan.translate(dp(-1.33f), dp(0));
+                imageSpan.setAlpha(0.75f);
+                sb.setSpan(imageSpan, sb.length() - 1, sb.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 repeatTextView.setText(sb);
+                repeatInfo.setVisibility(repeat[0] == 0 ? View.GONE : View.VISIBLE);
             };
             updateRepeatText.run();
 
             repeatContainer.addView(repeatTextView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, 28, Gravity.CENTER_HORIZONTAL, 32, 4, 32, 5));
             container.addView(repeatContainer, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            if (!UserConfig.getInstance(scheduleAccount).isPremium()) {
+                container.addView(repeatInfo, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, 24, 4, 24, 4));
+            }
+            if (!LocalRepeatController.getInstance(scheduleAccount).getRepeats(dialogId).isEmpty()) {
+                TextView manageRepeats = new TextView(context);
+                manageRepeats.setText(getString(R.string.LocalRepeatManage));
+                manageRepeats.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+                manageRepeats.setTextColor(datePickerColors.textColor);
+                manageRepeats.setGravity(Gravity.CENTER);
+                manageRepeats.setBackground(Theme.getSelectorDrawable(false));
+                container.addView(manageRepeats, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 40, 16, 0, 16, 0));
+                manageRepeats.setOnClickListener(v -> showLocalRepeats(context, scheduleAccount, dialogId, resourcesProvider));
+            }
         } else {
             repeatContainer = null;
             repeatTextView = null;
@@ -4719,20 +4778,6 @@ public class AlertsCreator {
 
         if (repeatTextView != null) {
             repeatTextView.setOnClickListener(v -> {
-                if (!UserConfig.getInstance(UserConfig.selectedAccount).isPremium()) {
-                    BulletinFactory.of(bulletinContainer, resourcesProvider)
-                        .createSimpleBulletin(R.raw.star_premium_2, AndroidUtilities.premiumText(LocaleController.getString(R.string.MessageScheduledRepeatPremium), () -> {
-                            final BaseFragment lastFragment = LaunchActivity.getSafeLastFragment();
-                            if (lastFragment == null) return;
-                            BaseFragment.BottomSheetParams params = new BaseFragment.BottomSheetParams();
-                            params.transitionFromLeft = true;
-                            params.allowNestedScroll = false;
-                            lastFragment.showAsSheet(new PremiumPreviewFragment("schedule_repeat"), params);
-                        }))
-                        .show();
-                    return;
-                }
-
                 final ItemOptions o = ItemOptions.makeOptions(bottomSheet.container, resourcesProvider, repeatContainer);
                 for (int i = 0; i < repeatValues.length; ++i) {
                     final int value = repeatValues[i];

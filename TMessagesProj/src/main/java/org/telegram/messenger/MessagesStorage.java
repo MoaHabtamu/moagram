@@ -171,7 +171,42 @@ public class MessagesStorage extends BaseController {
     }
 
     public int getArchiveUnreadCount() {
-        return archiveUnreadCount;
+        MessagesController messagesController = getMessagesController();
+        if (messagesController != null && messagesController.isDialogsEndReached(1)) {
+            ArrayList<TLRPC.Dialog> dialogs = messagesController.getDialogs(1);
+            HiddenChatsController hiddenChatsController = HiddenChatsController.getInstance(currentAccount);
+            int count = 0;
+            for (int a = 0, N = dialogs.size(); a < N; a++) {
+                TLRPC.Dialog dialog = dialogs.get(a);
+                if (dialog == null || (hiddenChatsController != null && hiddenChatsController.isChatHidden(dialog.id))) {
+                    continue;
+                }
+                if (messagesController.getDialogUnreadCount(dialog) > 0 || dialog.unread_mark) {
+                    count++;
+                }
+            }
+            return count;
+        }
+        return Math.max(0, archiveUnreadCount);
+    }
+
+    public void adjustArchiveUnreadCount(int delta) {
+        archiveUnreadCount = pendingArchiveUnreadCount = Math.max(0, archiveUnreadCount + delta);
+    }
+
+    public void updateUnreadCounters() {
+        storageQueue.postRunnable(() -> {
+            calcUnreadCounters(false);
+            AndroidUtilities.runOnUIThread(() -> {
+                ArrayList<MessagesController.DialogFilter> filters = getMessagesController().dialogFilters;
+                for (int a = 0, N = filters.size(); a < N; a++) {
+                    filters.get(a).unreadCount = filters.get(a).pendingUnreadCount;
+                }
+                mainUnreadCount = pendingMainUnreadCount;
+                archiveUnreadCount = pendingArchiveUnreadCount;
+                getNotificationCenter().postNotificationName(NotificationCenter.updateInterfaces, MessagesController.UPDATE_MASK_READ_DIALOG_MESSAGE);
+            });
+        });
     }
 
     public void setLastPtsValue(int value) {
@@ -383,6 +418,17 @@ public class MessagesStorage extends BaseController {
                         FileLog.e(e);
                         throw new RuntimeException("malformed");
                     }
+                }
+                try {
+                    database.executeFast("CREATE TABLE IF NOT EXISTS deleted_messages(mid INTEGER, uid INTEGER, date INTEGER, PRIMARY KEY(mid, uid))").stepThis().dispose();
+                    database.executeFast("CREATE TABLE IF NOT EXISTS message_edits(mid INTEGER, uid INTEGER, edit_date INTEGER, data BLOB, PRIMARY KEY(mid, uid, edit_date))").stepThis().dispose();
+                    database.executeFast("CREATE TABLE IF NOT EXISTS story_views(dialog_id INTEGER, story_id INTEGER, date INTEGER, count INTEGER, data BLOB, PRIMARY KEY(dialog_id, story_id))").stepThis().dispose();
+                    try {
+                        database.executeFast("ALTER TABLE story_views ADD COLUMN date INTEGER DEFAULT 0").stepThis().dispose();
+                    } catch (Exception ignore) {}
+                    database.executeFast("CREATE INDEX IF NOT EXISTS story_views_date_idx ON story_views(date)").stepThis().dispose();
+                } catch (Exception e) {
+                    FileLog.e(e);
                 }
             }
             databaseCreated = true;
@@ -731,7 +777,8 @@ public class MessagesStorage extends BaseController {
 
         database.executeFast("CREATE TABLE story_drafts (id INTEGER PRIMARY KEY, date INTEGER, data BLOB, type INTEGER);").stepThis().dispose();
 
-        database.executeFast("CREATE TABLE story_pushes (uid INTEGER, sid INTEGER, date INTEGER, localName TEXT, flags INTEGER, expire_date INTEGER, live INTEGER, PRIMARY KEY(uid, sid));").stepThis().dispose();
+        database.executeFast("CREATE TABLE story_views (dialog_id INTEGER, story_id INTEGER, date INTEGER, count INTEGER, data BLOB, PRIMARY KEY(dialog_id, story_id));").stepThis().dispose();
+        database.executeFast("CREATE INDEX IF NOT EXISTS story_views_date_idx ON story_views(date);").stepThis().dispose();
 
         database.executeFast("CREATE TABLE unconfirmed_auth (data BLOB);").stepThis().dispose();
 
@@ -2282,7 +2329,7 @@ public class MessagesStorage extends BaseController {
                 }
                 while (cursor.next()) {
                     long did = cursor.longValue(0);
-                    if (DialogObject.isFolderDialogId(did)) {
+                    if (DialogObject.isFolderDialogId(did) || HiddenChatsController.getInstance(currentAccount).isChatHidden(did)) {
                         continue;
                     }
                     ReadDialog dialog = new ReadDialog();
@@ -2779,6 +2826,9 @@ public class MessagesStorage extends BaseController {
             while (cursor.next()) {
                 int folderId = cursor.intValue(1);
                 long did = cursor.longValue(0);
+                if (HiddenChatsController.getInstance(currentAccount).isChatHidden(did)) {
+                    continue;
+                }
                 int unread;
                 int mentions = 0;
                 if (isForum(did, FORUM_TYPE_CHAT | FORUM_TYPE_BOT | FORUM_TYPE_DIRECT)) {
@@ -4324,6 +4374,9 @@ public class MessagesStorage extends BaseController {
         if (message == null) {
             return false;
         }
+        if (SharedConfig.keepSelfDestructingMedia && MessagesController.isSelfDestructingMessage(message)) {
+            return false;
+        }
         int type = 0;
         long id = 0;
         TLRPC.Document document = MessageObject.getDocument(message);
@@ -4735,6 +4788,9 @@ public class MessagesStorage extends BaseController {
     }
 
     public void emptyMessagesMedia(long dialogId, ArrayList<Integer> mids) {
+        if (SharedConfig.keepSelfDestructingMedia) {
+            return;
+        }
         storageQueue.postRunnable(() -> {
             SQLiteCursor cursor = null;
             SQLitePreparedStatement state = null;
@@ -5874,6 +5930,9 @@ public class MessagesStorage extends BaseController {
                     }
                     getNotificationCenter().postNotificationName(NotificationCenter.messagesReadContent, dialogId, midsArray);
                 });
+                if (SharedConfig.keepSelfDestructingMedia) {
+                    return;
+                }
 
                 state = database.executeFast("REPLACE INTO enc_tasks_v4 VALUES(?, ?, ?, ?)");
                 for (int a = 0; a < messages.size(); a++) {
@@ -6071,6 +6130,9 @@ public class MessagesStorage extends BaseController {
                     continue;
                 }
                 long did = array.keyAt(a);
+                if (HiddenChatsController.getInstance(currentAccount).isChatHidden(did)) {
+                    continue;
+                }
                 if (read) {
                     if (b == 0) {
                         dialogsWithUnread.remove(did);
@@ -8927,9 +8989,9 @@ public class MessagesStorage extends BaseController {
             ArrayList<Long> replyMessageRandomIds = new ArrayList<>();
             final String messageSelect;
             if (threadMessageId != 0) {
-                messageSelect = "SELECT m.read_state, m.data, m.send_state, m.mid, m.date, r.random_id, m.replydata, m.media, m.ttl, m.mention, m.imp, m.forwards, m.replies_data, m.custom_params, m.reply_to_story_id FROM messages_topics as m LEFT JOIN randoms_v2 as r ON r.mid = m.mid AND r.uid = m.uid";
+                messageSelect = "SELECT m.read_state, m.data, m.send_state, m.mid, m.date, r.random_id, m.replydata, m.media, m.ttl, m.mention, m.imp, m.forwards, m.replies_data, m.custom_params, m.reply_to_story_id, (dm.mid IS NOT NULL) FROM messages_topics as m LEFT JOIN randoms_v2 as r ON r.mid = m.mid AND r.uid = m.uid LEFT JOIN deleted_messages as dm ON dm.mid = m.mid AND dm.uid = m.uid";
             } else {
-                messageSelect = "SELECT m.read_state, m.data, m.send_state, m.mid, m.date, r.random_id, m.replydata, m.media, m.ttl, m.mention, m.imp, m.forwards, m.replies_data, m.custom_params, m.reply_to_story_id FROM messages_v2 as m LEFT JOIN randoms_v2 as r ON r.mid = m.mid AND r.uid = m.uid";
+                messageSelect = "SELECT m.read_state, m.data, m.send_state, m.mid, m.date, r.random_id, m.replydata, m.media, m.ttl, m.mention, m.imp, m.forwards, m.replies_data, m.custom_params, m.reply_to_story_id, (dm.mid IS NOT NULL) FROM messages_v2 as m LEFT JOIN randoms_v2 as r ON r.mid = m.mid AND r.uid = m.uid LEFT JOIN deleted_messages as dm ON dm.mid = m.mid AND dm.uid = m.uid";
             }
             if (scheduled) {
                 isEnd = true;
@@ -9695,6 +9757,14 @@ public class MessagesStorage extends BaseController {
                         if (customParams != null) {
                             MessageCustomParamsHelper.readLocalParams(message, customParams);
                             customParams.reuse();
+                        }
+                        if (cursor.getColumnCount() > 15) {
+                            message.wasDeleted = cursor.intValue(15) != 0;
+                        }
+                        if (message.wasDeleted && MessagesController.isSelfDestructingMessage(message)) {
+                            // Old unsafe builds could persist an expired message after Telegram had
+                            // already cleared its media. Never expose that malformed cached object.
+                            continue;
                         }
                         res.messages.add(message);
 
@@ -13350,6 +13420,91 @@ public class MessagesStorage extends BaseController {
         }
     }
 
+    public void saveMessageEdit(long dialogId, TLRPC.Message newMsg) {
+        if (newMsg == null || database == null) {
+            return;
+        }
+        storageQueue.postRunnable(() -> {
+            SQLiteCursor cursor = null;
+            try {
+                cursor = database.queryFinalized(String.format(Locale.US, "SELECT data FROM messages_v2 WHERE mid = %d AND uid = %d LIMIT 1", newMsg.id, dialogId));
+                if (cursor.next()) {
+                    NativeByteBuffer data = cursor.byteBufferValue(0);
+                    if (data != null) {
+                        TLRPC.Message existing = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                        if (existing != null) {
+                            int editDate = existing.edit_date != 0 ? existing.edit_date : existing.date;
+                            if (editDate == 0) {
+                                editDate = (int) (System.currentTimeMillis() / 1000);
+                            }
+                            boolean textDiff = !TextUtils.equals(existing.message, newMsg.message);
+                            boolean mediaDiff = (existing.media == null && newMsg.media != null) || (existing.media != null && newMsg.media == null);
+                            if (!mediaDiff && existing.media != null && newMsg.media != null) {
+                                if (existing.media.getClass() != newMsg.media.getClass()) {
+                                    mediaDiff = true;
+                                } else if (MessageObject.getPhoto(existing) != null && MessageObject.getPhoto(newMsg) != null) {
+                                    mediaDiff = MessageObject.getPhoto(existing).id != MessageObject.getPhoto(newMsg).id;
+                                } else if (MessageObject.getDocument(existing) != null && MessageObject.getDocument(newMsg) != null) {
+                                    mediaDiff = MessageObject.getDocument(existing).id != MessageObject.getDocument(newMsg).id;
+                                }
+                            }
+                            if (textDiff || mediaDiff || existing.edit_date != newMsg.edit_date) {
+                                SQLitePreparedStatement state = database.executeFast("INSERT OR REPLACE INTO message_edits VALUES(?, ?, ?, ?)");
+                                state.requery();
+                                state.bindInteger(1, newMsg.id);
+                                state.bindLong(2, dialogId);
+                                state.bindInteger(3, editDate);
+                                state.bindByteBuffer(4, data);
+                                state.step();
+                                state.dispose();
+                            }
+                        }
+                        data.reuse();
+                    }
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            } finally {
+                if (cursor != null) {
+                    cursor.dispose();
+                }
+            }
+        });
+    }
+
+    public void loadMessageEdits(long dialogId, int messageId, Utilities.Callback<ArrayList<TLRPC.Message>> callback) {
+        if (callback == null) {
+            return;
+        }
+        storageQueue.postRunnable(() -> {
+            ArrayList<TLRPC.Message> result = new ArrayList<>();
+            SQLiteCursor cursor = null;
+            try {
+                cursor = database.queryFinalized(String.format(Locale.US, "SELECT data, edit_date FROM message_edits WHERE mid = %d AND uid = %d ORDER BY edit_date ASC", messageId, dialogId));
+                while (cursor.next()) {
+                    NativeByteBuffer data = cursor.byteBufferValue(0);
+                    if (data != null) {
+                        TLRPC.Message msg = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                        if (msg != null) {
+                            msg.readAttachPath(data, getUserConfig().clientUserId);
+                            msg.dialog_id = dialogId;
+                            msg.edit_date = cursor.intValue(1);
+                            result.add(msg);
+                        }
+                        data.reuse();
+                    }
+                }
+            } catch (Exception e) {
+                FileLog.e(e);
+            } finally {
+                if (cursor != null) {
+                    cursor.dispose();
+                }
+            }
+            AndroidUtilities.runOnUIThread(() -> callback.run(result));
+        });
+    }
+
     public void putMessages(ArrayList<TLRPC.Message> messages, boolean withTransaction, boolean useQueue, boolean doNotUpdateDialogDate, int downloadMask, int mode, long threadMessageId) {
         putMessages(messages, withTransaction, useQueue, doNotUpdateDialogDate, downloadMask, false, mode, threadMessageId);
     }
@@ -14596,6 +14751,7 @@ public class MessagesStorage extends BaseController {
                 ArrayList<Pair<Long, Integer>> idsToDelete = new ArrayList<>();
                 ArrayList<TopicsController.TopicUpdate> topicUpdatesInUi = null;
                 ArrayList<TLRPC.Message> deletedMessages = currentUser == dialogId || dialogId == 0 ? new ArrayList<>() : null;
+                HashSet<Integer> selfDestructMids = new HashSet<>();
 
                 if (dialogId != 0) {
                     cursor = database.queryFinalized(String.format(Locale.US, "SELECT uid, data, read_state, out, mention, mid FROM messages_v2 WHERE mid IN(%s) AND uid = %d", ids, dialogId));
@@ -14630,7 +14786,7 @@ public class MessagesStorage extends BaseController {
                                 }
                             }
                         }
-                        if (!DialogObject.isEncryptedDialog(did) && !deleteFiles && did != currentUser) {
+                        if (!DialogObject.isEncryptedDialog(did) && !deleteFiles && did != currentUser && !SharedConfig.keepSelfDestructingMedia) {
                             continue;
                         }
                         NativeByteBuffer data = cursor.byteBufferValue(1);
@@ -14641,7 +14797,12 @@ public class MessagesStorage extends BaseController {
                                 deletedMessages.add(message);
                             }
                             data.reuse();
-                            if (DialogObject.isEncryptedDialog(did) || deleteFiles) {
+                            boolean isSelfDestruct = SharedConfig.keepSelfDestructingMedia && MessagesController.isSelfDestructingMessage(message);
+                            if (isSelfDestruct) {
+                                selfDestructMids.add(mid);
+                            }
+                            boolean skipFileDelete = isSelfDestruct || (SharedConfig.saveDeletedMessages && SharedConfig.saveDeletedMedia && !getMessagesController().isUserDeletedMessage(mid));
+                            if (!skipFileDelete && (DialogObject.isEncryptedDialog(did) || deleteFiles)) {
                                 addFilesToDelete(message, filesToDelete, idsToDelete, namesToDelete, false);
                             }
 
@@ -14683,7 +14844,14 @@ public class MessagesStorage extends BaseController {
                             TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
                             message.readAttachPath(data, getUserConfig().clientUserId);
                             data.reuse();
-                            addFilesToDelete(message, filesToDelete, idsToDelete, namesToDelete, false);
+                            boolean isSelfDestruct = SharedConfig.keepSelfDestructingMedia && MessagesController.isSelfDestructingMessage(message);
+                            if (isSelfDestruct) {
+                                selfDestructMids.add(mid);
+                            }
+                            boolean skipFileDelete = isSelfDestruct || (SharedConfig.saveDeletedMessages && SharedConfig.saveDeletedMedia && !getMessagesController().isUserDeletedMessage(mid));
+                            if (!skipFileDelete) {
+                                addFilesToDelete(message, filesToDelete, idsToDelete, namesToDelete, false);
+                            }
                             if (message.action instanceof TLRPC.TL_messageActionTopicCreate) {
                                 if (topicsToDelete == null) {
                                     topicsToDelete = new ArrayList<>();
@@ -14885,11 +15053,48 @@ public class MessagesStorage extends BaseController {
                         cursor.dispose();
                         cursor = null;
                     }
-                    database.executeFast(String.format(Locale.US, "DELETE FROM messages_v2 WHERE mid IN(%s) AND uid = %d", ids, did)).stepThis().dispose();
-                    database.executeFast(String.format(Locale.US, "DELETE FROM messages_topics WHERE mid IN(%s) AND uid = %d", ids, did)).stepThis().dispose();
-                    database.executeFast(String.format(Locale.US, "DELETE FROM polls_v2 WHERE mid IN(%s) AND uid = %d", ids, did)).stepThis().dispose();
-                    database.executeFast(String.format(Locale.US, "DELETE FROM bot_keyboard WHERE mid IN(%s) AND uid = %d", ids, did)).stepThis().dispose();
-                    database.executeFast(String.format(Locale.US, "DELETE FROM bot_keyboard_topics WHERE mid IN(%s) AND uid = %d", ids, did)).stepThis().dispose();
+                    ArrayList<Integer> toActuallyDelete = new ArrayList<>();
+                    ArrayList<Integer> toSaveDeleted = new ArrayList<>();
+                    if (SharedConfig.saveDeletedMessages) {
+                        for (int m = 0; m < mids.size(); m++) {
+                            int mid = mids.get(m);
+                            if (selfDestructMids.contains(mid)) {
+                                toSaveDeleted.add(mid);
+                            } else if (getMessagesController().isUserDeletedMessage(mid)) {
+                                toActuallyDelete.add(mid);
+                            } else {
+                                toSaveDeleted.add(mid);
+                            }
+                        }
+                    } else {
+                        for (int m = 0; m < mids.size(); m++) {
+                            int mid = mids.get(m);
+                            if (selfDestructMids.contains(mid)) {
+                                toSaveDeleted.add(mid);
+                            } else {
+                                toActuallyDelete.add(mid);
+                            }
+                        }
+                    }
+
+                    if (!toSaveDeleted.isEmpty()) {
+                        int now = (int) (System.currentTimeMillis() / 1000);
+                        for (int m = 0; m < toSaveDeleted.size(); m++) {
+                            int mid = toSaveDeleted.get(m);
+                            database.executeFast(String.format(Locale.US, "INSERT OR REPLACE INTO deleted_messages VALUES(%d, %d, %d)", mid, did, now)).stepThis().dispose();
+                        }
+                    }
+
+                    if (!toActuallyDelete.isEmpty()) {
+                        String deleteIdsStr = TextUtils.join(",", toActuallyDelete);
+                        database.executeFast(String.format(Locale.US, "DELETE FROM messages_v2 WHERE mid IN(%s) AND uid = %d", deleteIdsStr, did)).stepThis().dispose();
+                        database.executeFast(String.format(Locale.US, "DELETE FROM deleted_messages WHERE mid IN(%s) AND uid = %d", deleteIdsStr, did)).stepThis().dispose();
+                        database.executeFast(String.format(Locale.US, "DELETE FROM message_edits WHERE mid IN(%s) AND uid = %d", deleteIdsStr, did)).stepThis().dispose();
+                        database.executeFast(String.format(Locale.US, "DELETE FROM messages_topics WHERE mid IN(%s) AND uid = %d", deleteIdsStr, did)).stepThis().dispose();
+                        database.executeFast(String.format(Locale.US, "DELETE FROM polls_v2 WHERE mid IN(%s) AND uid = %d", deleteIdsStr, did)).stepThis().dispose();
+                        database.executeFast(String.format(Locale.US, "DELETE FROM bot_keyboard WHERE mid IN(%s) AND uid = %d", deleteIdsStr, did)).stepThis().dispose();
+                        database.executeFast(String.format(Locale.US, "DELETE FROM bot_keyboard_topics WHERE mid IN(%s) AND uid = %d", deleteIdsStr, did)).stepThis().dispose();
+                    }
                     if (unknownMessages.isEmpty()) {
                         cursor = database.queryFinalized(String.format(Locale.US, "SELECT uid, type FROM media_v4 WHERE mid IN(%s) AND uid = %d", ids, did));
                         SparseArray<LongSparseArray<Integer>> mediaCounts = null;
@@ -16302,7 +16507,7 @@ public class MessagesStorage extends BaseController {
                                     if (oldMessage.out && !message.out) {
                                         message.out = oldMessage.out;
                                     }
-                                    if (!sameMedia) {
+                                    if (!sameMedia && !(SharedConfig.saveEditHistory && SharedConfig.saveDeletedMedia)) {
                                         addFilesToDelete(oldMessage, filesToDelete, idsToDelete, namesToDelete, false);
                                     }
                                     NativeByteBuffer customParams = cursor.byteBufferValue(6);
@@ -18219,9 +18424,9 @@ public class MessagesStorage extends BaseController {
 
             LongSparseArray<DialogsSearchAdapter.DialogSearchResult> dialogsResult = new LongSparseArray<>();
             if (folderId >= 0) {
-                cursor = getDatabase().queryFinalized("SELECT did, date FROM dialogs WHERE folder_id = ? ORDER BY date DESC LIMIT 600", folderId);
+                cursor = getDatabase().queryFinalized("SELECT did, date FROM dialogs WHERE folder_id = ? ORDER BY date DESC LIMIT 5000", folderId);
             } else {
-                cursor = getDatabase().queryFinalized("SELECT did, date FROM dialogs ORDER BY date DESC LIMIT 600");
+                cursor = getDatabase().queryFinalized("SELECT did, date FROM dialogs ORDER BY date DESC LIMIT 5000");
             }
             while (cursor.next()) {
                 long id = cursor.longValue(0);
@@ -18302,9 +18507,9 @@ public class MessagesStorage extends BaseController {
                     }
                     int found = 0;
                     for (String q : search) {
-                        if (name.startsWith(q) || name.contains(" " + q) || tName != null && (tName.startsWith(q) || tName.contains(" " + q))) {
+                        if (name.contains(q) || tName != null && tName.contains(q)) {
                             found = 1;
-                        } else if (username != null && username.startsWith(q)) {
+                        } else if (username != null && username.contains(q)) {
                             found = 2;
                         }
                         if (found != 0) {
@@ -18344,11 +18549,14 @@ public class MessagesStorage extends BaseController {
                         tName = null;
                     }
                     for (String q : search) {
-                        if (name.startsWith(q) || name.contains(" " + q) || tName != null && (tName.startsWith(q) || tName.contains(" " + q))) {
+                        if (name.contains(q) || tName != null && tName.contains(q)) {
                             NativeByteBuffer data = cursor.byteBufferValue(0);
                             if (data != null) {
                                 TLRPC.Chat chat = TLRPC.Chat.TLdeserialize(data, data.readInt32(false), false);
                                 data.reuse();
+                                if (org.telegram.messenger.SharedConfig.searchHideJoined && !ChatObject.isNotInChat(chat)) {
+                                    continue;
+                                }
                                 if (dialogsType == DialogsActivity.DIALOGS_TYPE_BOT_REQUEST_PEER && (onlyDialogIds == null || !onlyDialogIds.contains(-chat.id))) {
                                     continue;
                                 }
@@ -19027,6 +19235,167 @@ public class MessagesStorage extends BaseController {
 
     public interface BooleanCallback {
         void run(boolean param);
+    }
+
+    public void saveStoryViewsCache(long dialogId, int storyId, TL_stories.StoryViewsList viewsList) {
+        if (viewsList == null) {
+            return;
+        }
+        storageQueue.postRunnable(() -> saveStoryViewsCacheInternal(dialogId, storyId, viewsList));
+    }
+
+    private void saveStoryViewsCacheInternal(long dialogId, int storyId, TL_stories.StoryViewsList viewsList) {
+        SQLitePreparedStatement state = null;
+        SQLiteCursor cursor = null;
+        try {
+            TL_stories.StoryViewsList toSave = viewsList;
+            cursor = database.queryFinalized(String.format(Locale.US, "SELECT data FROM story_views WHERE dialog_id = %d AND story_id = %d", dialogId, storyId));
+            if (cursor.next()) {
+                NativeByteBuffer existingData = cursor.byteBufferValue(0);
+                if (existingData != null) {
+                    TL_stories.StoryViewsList existing = TL_stories.StoryViewsList.TLdeserialize(existingData, existingData.readInt32(false), false);
+                    existingData.reuse();
+                    if (existing != null) {
+                        LongSparseArray<TL_stories.StoryView> existingViewsMap = new LongSparseArray<>();
+                        for (int i = 0; i < existing.views.size(); i++) {
+                            TL_stories.StoryView v = existing.views.get(i);
+                            long peerId = v.user_id != 0 ? v.user_id : (v.peer_id != null ? DialogObject.getPeerDialogId(v.peer_id) : 0);
+                            if (peerId != 0) {
+                                existingViewsMap.put(peerId, v);
+                            }
+                        }
+                        for (int i = 0; i < viewsList.views.size(); i++) {
+                            TL_stories.StoryView v = viewsList.views.get(i);
+                            long peerId = v.user_id != 0 ? v.user_id : (v.peer_id != null ? DialogObject.getPeerDialogId(v.peer_id) : 0);
+                            if (peerId == 0 || existingViewsMap.indexOfKey(peerId) < 0) {
+                                existing.views.add(v);
+                                if (peerId != 0) {
+                                    existingViewsMap.put(peerId, v);
+                                }
+                            }
+                        }
+
+                        LongSparseArray<TLRPC.User> existingUsersMap = new LongSparseArray<>();
+                        for (int i = 0; i < existing.users.size(); i++) {
+                            TLRPC.User u = existing.users.get(i);
+                            existingUsersMap.put(u.id, u);
+                        }
+                        for (int i = 0; i < viewsList.users.size(); i++) {
+                            TLRPC.User u = viewsList.users.get(i);
+                            if (existingUsersMap.indexOfKey(u.id) < 0) {
+                                existing.users.add(u);
+                                existingUsersMap.put(u.id, u);
+                            }
+                        }
+
+                        LongSparseArray<TLRPC.Chat> existingChatsMap = new LongSparseArray<>();
+                        for (int i = 0; i < existing.chats.size(); i++) {
+                            TLRPC.Chat c = existing.chats.get(i);
+                            existingChatsMap.put(c.id, c);
+                        }
+                        for (int i = 0; i < viewsList.chats.size(); i++) {
+                            TLRPC.Chat c = viewsList.chats.get(i);
+                            if (existingChatsMap.indexOfKey(c.id) < 0) {
+                                existing.chats.add(c);
+                                existingChatsMap.put(c.id, c);
+                            }
+                        }
+
+                        existing.count = Math.max(existing.count, Math.max(viewsList.count, existing.views.size()));
+                        existing.views_count = Math.max(existing.views_count, viewsList.views_count);
+                        existing.reactions_count = Math.max(existing.reactions_count, viewsList.reactions_count);
+                        toSave = existing;
+                    }
+                }
+            }
+            cursor.dispose();
+            cursor = null;
+
+            state = database.executeFast("REPLACE INTO story_views VALUES(?, ?, ?, ?, ?)");
+            NativeByteBuffer data = new NativeByteBuffer(toSave.getObjectSize());
+            toSave.serializeToStream(data);
+
+            state.requery();
+            state.bindLong(1, dialogId);
+            state.bindInteger(2, storyId);
+            state.bindInteger(3, (int) (System.currentTimeMillis() / 1000));
+            state.bindInteger(4, toSave.count);
+            state.bindByteBuffer(5, data);
+            state.step();
+            data.reuse();
+        } catch (Exception e) {
+            checkSQLException(e);
+        } finally {
+            if (cursor != null) {
+                cursor.dispose();
+            }
+            if (state != null) {
+                state.dispose();
+            }
+        }
+    }
+
+    public void loadStoryViewsCache(long dialogId, int storyId, Consumer<TL_stories.StoryViewsList> callback) {
+        storageQueue.postRunnable(() -> {
+            TL_stories.StoryViewsList result = null;
+            SQLiteCursor cursor = null;
+            try {
+                cursor = database.queryFinalized(String.format(Locale.US, "SELECT data FROM story_views WHERE dialog_id = %d AND story_id = %d", dialogId, storyId));
+                if (cursor.next()) {
+                    NativeByteBuffer data = cursor.byteBufferValue(0);
+                    if (data != null) {
+                        result = TL_stories.StoryViewsList.TLdeserialize(data, data.readInt32(false), false);
+                        data.reuse();
+                    }
+                }
+            } catch (Exception e) {
+                checkSQLException(e);
+            } finally {
+                if (cursor != null) {
+                    cursor.dispose();
+                }
+            }
+            final TL_stories.StoryViewsList finalResult = result;
+            AndroidUtilities.runOnUIThread(() -> {
+                if (callback != null) {
+                    callback.accept(finalResult);
+                }
+            });
+        });
+    }
+
+    public void deleteStoryViewsCache(long dialogId, int storyId) {
+        storageQueue.postRunnable(() -> {
+            try {
+                database.executeFast(String.format(Locale.US, "DELETE FROM story_views WHERE dialog_id = %d AND story_id = %d", dialogId, storyId)).stepThis().dispose();
+            } catch (Exception e) {
+                checkSQLException(e);
+            }
+        });
+    }
+
+    public void clearAllStoryViewsCache(Runnable onDone) {
+        storageQueue.postRunnable(() -> {
+            try {
+                database.executeFast("DELETE FROM story_views").stepThis().dispose();
+            } catch (Exception e) {
+                checkSQLException(e);
+            }
+            if (onDone != null) {
+                AndroidUtilities.runOnUIThread(onDone);
+            }
+        });
+    }
+
+    public void pruneOldStoryViewsCache(int olderThanDays) {
+        storageQueue.postRunnable(() -> {
+            try {
+                int cutoff = (int) (System.currentTimeMillis() / 1000) - (olderThanDays * 86400);
+                database.executeFast("DELETE FROM story_views WHERE date > 0 AND date < " + cutoff).stepThis().dispose();
+            } catch (Exception e) {
+                checkSQLException(e);
+            }
+        });
     }
 
     public static class TopicKey {

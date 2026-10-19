@@ -126,6 +126,9 @@ android {
 
 
     defaultConfig {
+        buildConfigField "int", "TELEGRAM_APP_ID", getProps("MOAGRAM_APP_ID") ?: "0"
+        buildConfigField "String", "TELEGRAM_APP_HASH", groovy.json.JsonOutput.toJson(getProps("MOAGRAM_APP_HASH") ?: "")
+
         minSdkVersion 21
         targetSdkVersion 36
 

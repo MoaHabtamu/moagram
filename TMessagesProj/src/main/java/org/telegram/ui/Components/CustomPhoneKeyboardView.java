@@ -25,6 +25,7 @@ import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.view.GestureDetectorCompat;
 
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.ui.ActionBar.Theme;
 
@@ -34,6 +35,8 @@ public class CustomPhoneKeyboardView extends ViewGroup {
     private final static int SIDE_PADDING = 10, BUTTON_PADDING = 6;
 
     private final ImageView backButton;
+    private final ImageView fingerprintButton;
+    private OnClickListener onFingerprintClickListener;
     private EditText editText;
     private final View[] views = new View[12];
 
@@ -134,6 +137,27 @@ public class CustomPhoneKeyboardView extends ViewGroup {
             addView(views[i]);
         }
 
+        int pad = dp(11);
+
+        fingerprintButton = new ImageView(context);
+        fingerprintButton.setImageResource(R.drawable.fingerprint);
+        fingerprintButton.setScaleType(ImageView.ScaleType.CENTER);
+        fingerprintButton.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        fingerprintButton.setContentDescription(LocaleController.getString(R.string.AccDescrFingerprint));
+        fingerprintButton.setPadding(pad, pad, pad, pad);
+        fingerprintButton.setOnClickListener(v -> {
+            try {
+                performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP, HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+                playSoundEffect(SoundEffectConstants.CLICK);
+            } catch (Exception ignore) {}
+            if (onFingerprintClickListener != null) {
+                onFingerprintClickListener.onClick(v);
+            }
+        });
+        fingerprintButton.setVisibility(GONE);
+        views[9] = fingerprintButton;
+        addView(fingerprintButton);
+
         GestureDetectorCompat backDetector = setupBackButtonDetector(context);
         backButton = new ImageView(context) {
             @SuppressLint("ClickableViewAccessibility")
@@ -153,7 +177,6 @@ public class CustomPhoneKeyboardView extends ViewGroup {
         };
         backButton.setImageResource(R.drawable.msg_clear_input);
         backButton.setColorFilter(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
-        int pad = dp(11);
         backButton.setPadding(pad, pad, pad, pad);
         backButton.setOnClickListener(v -> {});
         addView(views[11] = backButton);
@@ -220,6 +243,20 @@ public class CustomPhoneKeyboardView extends ViewGroup {
         dispatchBackWhenEmpty = false;
     }
 
+    public void setOnFingerprintClickListener(OnClickListener listener) {
+        this.onFingerprintClickListener = listener;
+    }
+
+    public void setFingerprintVisible(boolean visible) {
+        if (fingerprintButton != null) {
+            fingerprintButton.setVisibility(visible ? VISIBLE : GONE);
+        }
+    }
+
+    public ImageView getFingerprintButton() {
+        return fingerprintButton;
+    }
+
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         int btnWidth = (getWidth() - dp(SIDE_PADDING * 2 + BUTTON_PADDING * 2)) / 3;
@@ -229,7 +266,7 @@ public class CustomPhoneKeyboardView extends ViewGroup {
             int rowX = i % 3, rowY = i / 3;
             int left = rowX * (btnWidth + dp(BUTTON_PADDING)) + dp(SIDE_PADDING);
             int top = rowY * (btnHeight + dp(BUTTON_PADDING)) + dp(SIDE_PADDING);
-            if (views[i] != null) {
+            if (views[i] != null && views[i].getVisibility() != GONE) {
                 views[i].layout(left, top, left + btnWidth, top + btnHeight);
             }
         }
@@ -243,7 +280,7 @@ public class CustomPhoneKeyboardView extends ViewGroup {
         int btnHeight = (getHeight() - dp(SIDE_PADDING * 3 + BUTTON_PADDING * 2)) / 4;
 
         for (View v : views) {
-            if (v != null) {
+            if (v != null && v.getVisibility() != GONE) {
                 v.measure(MeasureSpec.makeMeasureSpec(btnWidth, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(btnHeight, MeasureSpec.EXACTLY));
             }
         }

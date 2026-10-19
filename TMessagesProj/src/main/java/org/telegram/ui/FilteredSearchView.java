@@ -48,6 +48,7 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.browser.Browser;
@@ -638,7 +639,7 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
             if (dialogId != 0 && communityId == 0) {
                 final TLRPC.TL_messages_search req = new TLRPC.TL_messages_search();
                 req.q = finalQuery;
-                req.limit = 20;
+                req.limit = 50;
                 req.filter = currentSearchFilter == null ? new TLRPC.TL_inputMessagesFilterEmpty() : currentSearchFilter.filter;
                 req.peer = AccountInstance.getInstance(currentAccount).getMessagesController().getInputPeer(dialogId);
                 if (minDate > 0) {
@@ -663,7 +664,7 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
                 }
 
                 final TLRPC.TL_messages_searchGlobal req = new TLRPC.TL_messages_searchGlobal();
-                req.limit = 20;
+                req.limit = 100;
                 req.q = finalQuery;
                 req.filter = currentSearchFilter == null ? new TLRPC.TL_inputMessagesFilterEmpty() : currentSearchFilter.filter;
                 req.community = MessagesController.getInstance(currentAccount).getInputChannel(communityId);
@@ -701,7 +702,20 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
                     TLRPC.messages_Messages res = response;
                     int n = res.messages.size();
                     for (int i = 0; i < n; i++) {
-                        MessageObject messageObject = new MessageObject(currentAccount, res.messages.get(i), false, true);
+                        TLRPC.Message message = res.messages.get(i);
+                        long did = MessageObject.getDialogId(message);
+                        if (SharedConfig.searchHideJoined) {
+                            if (did < 0) {
+                                TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-did);
+                                if (chat != null && !ChatObject.isNotInChat(chat)) {
+                                    continue;
+                                }
+                            }
+                            if (MessagesController.getInstance(currentAccount).dialogs_dict.get(did) != null) {
+                                continue;
+                            }
+                        }
+                        MessageObject messageObject = new MessageObject(currentAccount, message, false, true);
                         messageObject.setQuery(finalQuery);
                         messageObjects.add(messageObject);
                     }

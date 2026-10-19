@@ -198,7 +198,7 @@ public class MessagePreviewParams {
 
     public MessagePreviewParams(boolean secret, boolean noforwards, boolean monoforum) {
         this.isSecret = secret;
-        this.noforwards = secret || noforwards;
+        this.noforwards = secret || (noforwards && !SharedConfig.allowSaveRestrictedMedia);
         this.monoforum = monoforum;
     }
 

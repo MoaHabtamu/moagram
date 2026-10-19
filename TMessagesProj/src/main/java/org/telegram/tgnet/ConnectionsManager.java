@@ -36,13 +36,16 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FileUploadOperation;
 import org.telegram.messenger.KeepAliveJob;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.LocalRepeatController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.PushListenerController;
 import org.telegram.messenger.SharedConfig;
+import org.telegram.messenger.GhostModeController;
 import org.telegram.messenger.StatsController;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
+import org.telegram.tgnet.tl.TL_stories;
 import org.telegram.ui.Components.VideoPlayer;
 import org.telegram.ui.LoginActivity;
 
@@ -72,6 +75,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.SSLException;
 
@@ -388,8 +392,80 @@ public class ConnectionsManager extends BaseController {
     }
 
     private void sendRequestInternal(TLObject object, RequestDelegate onComplete, RequestDelegateTimestamp onCompleteTimestamp, QuickAckDelegate onQuickAck, WriteToSocketDelegate onWriteToSocket, int flags, int datacenterId, int connectionType, boolean immediate, int requestToken) {
+        final boolean isMessageReadReq = (object instanceof TLRPC.TL_messages_readHistory
+                || object instanceof TLRPC.TL_channels_readHistory
+                || object instanceof TLRPC.TL_messages_readDiscussion
+                || object instanceof TLRPC.TL_messages_readSavedHistory
+                || object instanceof TLRPC.TL_messages_readEncryptedHistory
+                || object instanceof TLRPC.TL_messages_readMessageContents
+                || object instanceof TLRPC.TL_channels_readMessageContents
+                || object instanceof TLRPC.TL_messages_readMentions
+                || object instanceof TLRPC.TL_messages_readReactions
+                || object instanceof TLRPC.TL_messages_readPollVotes);
+        if (GhostModeController.getInstance(currentAccount).isGhostRead() && isMessageReadReq && !allowNextGhostReadReceipt.compareAndSet(true, false)) {
+            if (BuildVars.LOGS_ENABLED) {
+                FileLog.d("GhostMode: Suppressed outgoing read receipt: " + object);
+            }
+            object.freeResources();
+            if (onComplete != null) {
+                Utilities.stageQueue.postRunnable(() -> onComplete.run(null, null));
+            } else if (onCompleteTimestamp != null) {
+                Utilities.stageQueue.postRunnable(() -> onCompleteTimestamp.run(null, null, getCurrentTime()));
+            }
+            return;
+        }
+        if (GhostModeController.getInstance(currentAccount).isStoriesHidden()) {
+            if (object instanceof TL_stories.TL_stories_readStories || object instanceof TL_stories.TL_stories_incrementStoryViews) {
+                if (BuildVars.LOGS_ENABLED) {
+                    FileLog.d("GhostMode: Suppressed outgoing story view/read request: " + object);
+                }
+                if (object != null) {
+                    object.freeResources();
+                }
+                if (onComplete != null) {
+                    Utilities.stageQueue.postRunnable(() -> {
+                        try {
+                            onComplete.run(new TLRPC.TL_boolTrue(), null);
+                        } catch (Exception ignore) {}
+                    });
+                }
+                return;
+            }
+        }
+        final boolean isMessageSendReq = (object instanceof TLRPC.TL_messages_sendMessage
+                || object instanceof TLRPC.TL_messages_sendMedia
+                || object instanceof TLRPC.TL_messages_forwardMessages
+                || object instanceof TLRPC.TL_messages_sendMultiMedia
+                || object instanceof TLRPC.TL_messages_sendInlineBotResult);
+
+        if (GhostModeController.getInstance(currentAccount).isStealthSend() || GhostModeController.getInstance(currentAccount).isOnlineHidden()) {
+            if (object instanceof TLRPC.TL_messages_sendMessage) {
+                ((TLRPC.TL_messages_sendMessage) object).background = true;
+            } else if (object instanceof TLRPC.TL_messages_sendMedia) {
+                ((TLRPC.TL_messages_sendMedia) object).background = true;
+            } else if (object instanceof TLRPC.TL_messages_forwardMessages) {
+                ((TLRPC.TL_messages_forwardMessages) object).background = true;
+            } else if (object instanceof TLRPC.TL_messages_sendMultiMedia) {
+                ((TLRPC.TL_messages_sendMultiMedia) object).background = true;
+            } else if (object instanceof TLRPC.TL_messages_sendInlineBotResult) {
+                ((TLRPC.TL_messages_sendInlineBotResult) object).background = true;
+            }
+        }
+
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("send request " + object + " with token = " + requestToken);
+        }
+        final LocalRepeatController.Preparation localRepeat = LocalRepeatController.getInstance(currentAccount).prepare(object);
+        if (localRepeat != null && localRepeat.error != null) {
+            TLRPC.TL_error error = new TLRPC.TL_error();
+            error.code = 400;
+            error.text = localRepeat.error;
+            if (onComplete != null) {
+                onComplete.run(null, error);
+            } else if (onCompleteTimestamp != null) {
+                onCompleteTimestamp.run(null, error, getCurrentTime());
+            }
+            return;
         }
         try {
             NativeByteBuffer buffer = new NativeByteBuffer(object.getObjectSize());
@@ -450,9 +526,16 @@ public class ConnectionsManager extends BaseController {
                         FileLog.d("java received " + resp + (error != null ? " error = " + error : "") + " messageId = 0x" + Long.toHexString(requestMsgId));
                         FileLog.dumpResponseAndRequest(currentAccount, object, resp, error, requestMsgId, finalStartRequestTime, requestToken);
                     }
+                    if ((GhostModeController.getInstance(currentAccount).isStealthSend() || GhostModeController.getInstance(currentAccount).isOnlineHidden())
+                            && (isMessageSendReq || isMessageReadReq || object instanceof TLRPC.TL_messages_editMessage)) {
+                        AndroidUtilities.runOnUIThread(() -> {
+                            AccountInstance.getInstance(currentAccount).getMessagesController().sendOfflineStatus();
+                        });
+                    }
                     final TLObject finalResponse = resp;
                     final TLRPC.TL_error finalError = error;
                     Utilities.stageQueue.postRunnable(() -> {
+                        LocalRepeatController.getInstance(currentAccount).onResponse(localRepeat, finalResponse, finalError);
                         if (onComplete != null) {
                             onComplete.run(finalResponse, finalError);
                         } else if (onCompleteTimestamp != null) {
@@ -476,6 +559,12 @@ public class ConnectionsManager extends BaseController {
     }
 
     private final ConcurrentHashMap<Integer, RequestCallbacks> requestCallbacks = new ConcurrentHashMap<>();
+    private final AtomicBoolean allowNextGhostReadReceipt = new AtomicBoolean(false);
+
+    public void allowNextGhostReadReceipt() {
+        allowNextGhostReadReceipt.set(true);
+    }
+
     private static class RequestCallbacks {
         public RequestDelegateInternal onComplete;
         public QuickAckDelegate onQuickAck;

@@ -5095,7 +5095,7 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
                 currentStory.set(storyItem);
                 allowShare = allowShareLink = !unsupported && currentStory.storyItem != null && !(currentStory.storyItem instanceof TL_stories.TL_storyItemDeleted) && !(currentStory.storyItem instanceof TL_stories.TL_storyItemSkipped);
                 if (allowShare) {
-                    allowShare = currentStory.allowScreenshots() && currentStory.storyItem.isPublic;
+                    allowShare = currentStory.allowScreenshots() && (currentStory.storyItem.isPublic || SharedConfig.allowSaveRestrictedMedia);
                 }
                 if (allowShare) {
                     allowShare = currentStory.storyItem.pinned || !StoriesUtilities.isExpired(currentAccount, currentStory.storyItem);
@@ -7151,6 +7151,9 @@ public class PeerStoriesView extends SizeNotifierFrameLayout implements Notifica
         }
 
         public boolean allowScreenshots() {
+            if (SharedConfig.allowSaveRestrictedMedia) {
+                return true;
+            }
             if (uploadingStory != null) {
                 return uploadingStory.entry.allowScreenshots;
             }

@@ -69,6 +69,7 @@ import org.telegram.ui.Stories.recorder.ButtonWithCounterView;
 
 import java.util.ArrayList;
 
+import org.telegram.messenger.TelegraphPublisher;
 import org.telegram.ui.iv.Latex;
 
 public class ChatAttachAlertRichLayout extends ChatAttachAlert.AttachAlertLayout implements NotificationCenter.NotificationCenterDelegate {
@@ -336,7 +337,7 @@ public class ChatAttachAlertRichLayout extends ChatAttachAlert.AttachAlertLayout
         }
         final ItemOptions o = ItemOptions.makeOptions(this, resourcesProvider, v, true).dontFocus();
         final ItemOptions headers = o.makeSwipeback();
-        final boolean premiumLock = !MessagesController.getInstance(currentAccount).richEditorAllowed() && !UserConfig.getInstance(currentAccount).isPremium();
+        final boolean premiumLock = false;
 
         headers.add(R.drawable.ic_ab_back, getString(R.string.Back), () -> o.closeSwipeback());
         headers.addGap();
@@ -823,15 +824,51 @@ public class ChatAttachAlertRichLayout extends ChatAttachAlert.AttachAlertLayout
             updateSendButtonEnabled();
             return false;
         }
-        if (!MessagesController.getInstance(currentAccount).richEditorAllowed()) {
-            // non-premium user with non-lossy content: send it as a simple message via the composer
+        if (!MessagesController.getInstance(currentAccount).richEditorAllowed() || !UserConfig.getInstance(currentAccount).isPremium()) {
+            final ArrayList<TL_iv.PageBlock> sendBlocks = listView.flattenRowsToBlocks();
+            if (sendBlocks.isEmpty()) {
+                return false;
+            }
             if (parentAlert.baseFragment instanceof ChatActivity) {
-                final ChatActivityEnterView enterView = ((ChatActivity) parentAlert.baseFragment).getChatActivityEnterView();
-                if (enterView != null) {
-                    enterView.sendConvertedRichAsSimple(listView.toSimpleMessage(), notify, scheduleDate, scheduleRepeatPeriod);
-                    parentAlert.dismiss(true);
-                    return true;
-                }
+                final ChatActivity chatActivity = (ChatActivity) parentAlert.baseFragment;
+                final ChatActivityEnterView enterView = chatActivity.getChatActivityEnterView();
+                final CharSequence fallbackSimple = listView.toSimpleMessage();
+                TelegraphPublisher.publish(currentAccount, null, sendBlocks, new TelegraphPublisher.Callback() {
+                    @Override
+                    public void onSuccess(String url) {
+                        if (enterView != null) {
+                            enterView.sendConvertedRichAsSimple(url, notify, scheduleDate, scheduleRepeatPeriod);
+                        } else {
+                            chatActivity.getSendMessagesHelper().sendMessage(
+                                SendMessagesHelper.SendMessageParams.of(
+                                    url,
+                                    chatActivity.getDialogId(),
+                                    chatActivity.getReplyMessage(),
+                                    chatActivity.getThreadMessage(),
+                                    null,
+                                    true,
+                                    null,
+                                    null,
+                                    null,
+                                    notify,
+                                    scheduleDate,
+                                    scheduleRepeatPeriod,
+                                    null,
+                                    false
+                                )
+                            );
+                        }
+                    }
+
+                    @Override
+                    public void onError(Exception error) {
+                        if (enterView != null) {
+                            enterView.sendConvertedRichAsSimple(fallbackSimple, notify, scheduleDate, scheduleRepeatPeriod);
+                        }
+                    }
+                });
+                parentAlert.dismiss(true);
+                return true;
             }
             return false;
         }
@@ -878,10 +915,6 @@ public class ChatAttachAlertRichLayout extends ChatAttachAlert.AttachAlertLayout
     private MessageSendPreview messageSendPreview;
 
     private boolean showSendPreview(View view) {
-        if (!UserConfig.getInstance(currentAccount).isPremium()) {
-            new PremiumFeatureBottomSheet(parentAlert.baseFragment, getContext(), currentAccount, PremiumPreviewFragment.PREMIUM_FEATURE_RICH_EDITOR, true).show();
-            return true;
-        }
         if (!listView.hasAnyText()) return false;
         if (listView.hasPendingUploads()) return false;
         if (!listView.isWithinLimits()) { updateSendButtonEnabled(); return false; }
@@ -1136,17 +1169,13 @@ public class ChatAttachAlertRichLayout extends ChatAttachAlert.AttachAlertLayout
 
     private void updateSendButtonLocked() {
         if (toolbar != null) {
-            final boolean premiumLocked = !MessagesController.getInstance(currentAccount).richEditorAllowed()
-                && !UserConfig.getInstance(currentAccount).isPremium();
-            toolbar.getSendButton().setLocked(premiumLocked && listView.isLossy());
-            toolbar.setPremiumLocked(premiumLocked);
+            toolbar.getSendButton().setLocked(false);
+            toolbar.setPremiumLocked(false);
         }
     }
 
     private boolean isSendLocked() {
-        return !MessagesController.getInstance(currentAccount).richEditorAllowed()
-            && !UserConfig.getInstance(currentAccount).isPremium()
-            && listView.isLossy();
+        return false;
     }
 
     private void showConversionSheet() {

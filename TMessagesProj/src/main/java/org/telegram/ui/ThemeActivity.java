@@ -153,6 +153,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
     private int textSizeRow;
     private int settingsRow;
     private int directShareRow;
+    private int searchHideJoinedRow;
     @Keep
     private int sensitiveContentRow;
     private int raiseToSpeakRow;
@@ -584,6 +585,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
         changeUserColor = -1;
         settingsRow = -1;
         directShareRow = -1;
+        searchHideJoinedRow = -1;
         sensitiveContentRow = -1;
         enableAnimationsRow = -1;
         raiseToSpeakRow = -1;
@@ -699,6 +701,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
 
             otherHeaderRow = rowCount++;
             directShareRow = rowCount++;
+            searchHideJoinedRow = rowCount++;
             TL_account.contentSettings contentSettings = getMessagesController().getContentSettings();
             if (contentSettings != null && contentSettings.sensitive_can_change) {
                 sensitiveContentRow = rowCount++;
@@ -1315,6 +1318,11 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                 SharedConfig.toggleDirectShare();
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(SharedConfig.directShare);
+                }
+            } else if (position == searchHideJoinedRow) {
+                SharedConfig.toggleSearchHideJoined();
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(SharedConfig.searchHideJoined);
                 }
             } else if (position == sensitiveContentRow) {
                 if (!getMessagesController().showSensitiveContent()) {
@@ -2616,7 +2624,9 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                     } else if (position == pauseOnMediaRow) {
                         textCheckCell.setTextAndCheck(getString(R.string.PauseMusicOnMedia), SharedConfig.pauseMusicOnMedia, true);
                     } else if (position == directShareRow) {
-                        textCheckCell.setTextAndValueAndCheck(getString("DirectShare", R.string.DirectShare), getString("DirectShareInfo", R.string.DirectShareInfo), SharedConfig.directShare, false, true);
+                        textCheckCell.setTextAndValueAndCheck(getString("DirectShare", R.string.DirectShare), getString("DirectShareInfo", R.string.DirectShareInfo), SharedConfig.directShare, true, true);
+                    } else if (position == searchHideJoinedRow) {
+                        textCheckCell.setTextAndValueAndCheck(getString(R.string.SearchHideJoined), getString(R.string.SearchHideJoinedSubtitle), SharedConfig.searchHideJoined, false, true);
                     } else if (position == sensitiveContentRow) {
                         textCheckCell.setTextAndValueAndCheck(getString(R.string.ShowSensitiveContent), getString(R.string.ShowSensitiveContentInfo), getMessagesController().showSensitiveContent(), true, true);
                     } else if (position == chatBlurRow) {
@@ -2754,7 +2764,7 @@ public class ThemeActivity extends BaseFragment implements NotificationCenter.No
                 return TYPE_BRIGHTNESS;
             } else if (position == scheduleLocationRow || position == sendByEnterRow ||
                     position == raiseToSpeakRow || position == raiseToListenRow || position == pauseOnRecordRow ||
-                    position == directShareRow || position == chatBlurRow || position == pauseOnMediaRow || position == nextMediaTapRow || position == sensitiveContentRow) {
+                    position == directShareRow || position == searchHideJoinedRow || position == chatBlurRow || position == pauseOnMediaRow || position == nextMediaTapRow || position == sensitiveContentRow) {
                 return TYPE_TEXT_CHECK;
             } else if (position == textSizeRow) {
                 return TYPE_TEXT_SIZE;

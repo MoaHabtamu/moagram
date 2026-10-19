@@ -37,6 +37,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.HiddenChatsController;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
@@ -219,6 +220,27 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         private boolean forceDarkTheme;
         private boolean showPremiumBlock;
         private Theme.ResourcesProvider resourcesProvider;
+        private final ArrayList<TLRPC.TL_topPeer> filteredHints = new ArrayList<>();
+
+        private void filterHints() {
+            filteredHints.clear();
+            ArrayList<TLRPC.TL_topPeer> hints = MediaDataController.getInstance(currentAccount).hints;
+            HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+            for (int i = 0; i < hints.size(); i++) {
+                TLRPC.TL_topPeer peer = hints.get(i);
+                long did = 0;
+                if (peer.peer.user_id != 0) {
+                    did = peer.peer.user_id;
+                } else if (peer.peer.channel_id != 0) {
+                    did = -peer.peer.channel_id;
+                } else if (peer.peer.chat_id != 0) {
+                    did = -peer.peer.chat_id;
+                }
+                if (!controller.isChatHidden(did)) {
+                    filteredHints.add(peer);
+                }
+            }
+        }
 
         public CategoryAdapterRecycler(Context context, int account, boolean drawChecked, boolean showPremiumBlock, Theme.ResourcesProvider resourcesProvider) {
             this.drawChecked = drawChecked;
@@ -226,10 +248,17 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             currentAccount = account;
             this.showPremiumBlock = showPremiumBlock;
             this.resourcesProvider = resourcesProvider;
+            filterHints();
         }
 
         public void setIndex(int value) {
             notifyDataSetChanged();
+        }
+
+        @Override
+        public void notifyDataSetChanged() {
+            filterHints();
+            super.notifyDataSetChanged();
         }
 
         @Override
@@ -251,7 +280,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
             HintDialogCell cell = (HintDialogCell) holder.itemView;
 
-            TLRPC.TL_topPeer peer = MediaDataController.getInstance(currentAccount).hints.get(position);
+            TLRPC.TL_topPeer peer = position < filteredHints.size() ? filteredHints.get(position) : null;
+            if (peer == null) {
+                return;
+            }
             TLRPC.Dialog dialog = new TLRPC.TL_dialog();
             TLRPC.Chat chat = null;
             TLRPC.User user = null;
@@ -278,11 +310,43 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
 
         @Override
         public int getItemCount() {
-            return MediaDataController.getInstance(currentAccount).hints.size();
+            return filteredHints.size();
         }
     }
 
     private boolean filter(Object obj) {
+        if (obj != null) {
+            long dialogId = 0;
+            if (obj instanceof TLRPC.User) {
+                dialogId = ((TLRPC.User) obj).id;
+            } else if (obj instanceof TLRPC.Chat) {
+                dialogId = -((TLRPC.Chat) obj).id;
+                TLRPC.Chat chat = (TLRPC.Chat) obj;
+                if (org.telegram.messenger.SharedConfig.searchHideJoined && !ChatObject.isNotInChat(chat)) {
+                    return false;
+                }
+            } else if (obj instanceof TLRPC.EncryptedChat) {
+                dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) obj).id);
+            } else if (obj instanceof TLRPC.Dialog) {
+                dialogId = ((TLRPC.Dialog) obj).id;
+                if (org.telegram.messenger.SharedConfig.searchHideJoined && dialogId < 0) {
+                    TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-dialogId);
+                    if (chat != null && !ChatObject.isNotInChat(chat)) {
+                        return false;
+                    }
+                    if (MessagesController.getInstance(currentAccount).dialogs_dict.get(dialogId) != null) {
+                        return false;
+                    }
+                }
+            }
+            if (dialogId != 0) {
+                boolean isHidden = HiddenChatsController.getInstance(currentAccount).isChatHidden(dialogId);
+                boolean vaultMode = dialogsActivity != null && dialogsActivity.isHiddenChats();
+                if (vaultMode ? !isHidden : isHidden) {
+                    return false;
+                }
+            }
+        }
         if (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT) {
             return true;
         }
@@ -420,7 +484,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         final long dialogId = delegate.getSearchForumDialogId();
 
         final TLRPC.TL_messages_search req = new TLRPC.TL_messages_search();
-        req.limit = 20;
+        req.limit = 50;
         req.q = query;
         req.filter = new TLRPC.TL_inputMessagesFilterEmpty();
         req.peer = MessagesController.getInstance(currentAccount).getInputPeer(dialogId);
@@ -551,7 +615,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         req.broadcasts_only = (currentMessagesFilter.flags & 2) != 0;
         req.groups_only = (currentMessagesFilter.flags & 4) != 0;
         req.users_only = (currentMessagesFilter.flags & 8) != 0;
-        req.limit = 20;
+        req.limit = 100;
         req.q = query;
         req.filter = new TLRPC.TL_inputMessagesFilterEmpty();
         req.flags |= 1;
@@ -617,6 +681,16 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                         MessagesStorage.getInstance(currentAccount).putUsersAndChats(res.users, res.chats, true, true);
                         MessagesController.getInstance(currentAccount).putUsers(res.users, false);
                         MessagesController.getInstance(currentAccount).putChats(res.chats, false);
+                        if (res.chats != null) {
+                            for (TLRPC.Chat chat : res.chats) {
+                                if (chat == null) continue;
+                                if (org.telegram.messenger.SharedConfig.searchHideJoined && !ChatObject.isNotInChat(chat)) continue;
+                                if (searchAdapterHelper.getGlobalSearchMap().get(-chat.id) == null) {
+                                    searchAdapterHelper.getGlobalSearch().add(chat);
+                                    searchAdapterHelper.getGlobalSearchMap().put(-chat.id, chat);
+                                }
+                            }
+                        }
                         if (req.offset_id == 0) {
                             searchResultMessages.clear();
                         }
@@ -627,6 +701,22 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                             int maxId = MessagesController.getInstance(currentAccount).deletedHistory.get(did);
                             if (maxId != 0 && message.id <= maxId) {
                                 continue;
+                            }
+                            boolean isHidden = HiddenChatsController.getInstance(currentAccount).isChatHidden(did);
+                            boolean vaultMode = dialogsActivity != null && dialogsActivity.isHiddenChats();
+                            if (vaultMode ? !isHidden : isHidden) {
+                                continue;
+                            }
+                            if (org.telegram.messenger.SharedConfig.searchHideJoined) {
+                                if (did < 0) {
+                                    TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-did);
+                                    if (chat != null && !ChatObject.isNotInChat(chat)) {
+                                        continue;
+                                    }
+                                }
+                                if (MessagesController.getInstance(currentAccount).dialogs_dict.get(did) != null) {
+                                    continue;
+                                }
                             }
                             MessageObject msg = messageObjects.get(a);
                             if (!searchForumResultMessages.isEmpty()) {
@@ -666,7 +756,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                             delegate.searchStateChanged(waitingResponseCount > 0, true);
                             delegate.runResultsEnterAnimation();
                         }
-                        globalSearchCollapsed = true;
+                        globalSearchCollapsed = false;
                         phoneCollapsed = true;
                         forceLoadingMessages = false;
                         if (messagesEmptyLayout != null) {
@@ -1113,27 +1203,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 ConnectionsManager.getInstance(currentAccount).cancelRequest(sponsoredReqId, true);
                 sponsoredReqId = 0;
             }
-            if (query == null || query.length() < 4 || UserConfig.getInstance(currentAccount).isPremium() && MessagesController.getInstance(currentAccount).isSponsoredDisabled()) {
-                sponsoredQuery = null;
-            } else {
-                final TLRPC.TL_contacts_getSponsoredPeers req = new TLRPC.TL_contacts_getSponsoredPeers();
-                req.q = sponsoredQuery = query;
-                sponsoredReqId = ConnectionsManager.getInstance(currentAccount).sendRequest(req, (res, err) -> AndroidUtilities.runOnUIThread(() -> {
-                    sponsoredReqId = 0;
-                    if (res instanceof TLRPC.TL_contacts_sponsoredPeersEmpty) {
-                        if (!sponsoredPeers.isEmpty()) {
-                            sponsoredPeers.clear();
-                            notifyDataSetChanged();
-                        }
-                    } else if (res instanceof TLRPC.TL_contacts_sponsoredPeers) {
-                        final TLRPC.TL_contacts_sponsoredPeers r = (TLRPC.TL_contacts_sponsoredPeers) res;
-                        MessagesController.getInstance(currentAccount).putUsers(r.users, true);
-                        MessagesController.getInstance(currentAccount).putChats(r.chats, true);
-                        sponsoredPeers.addAll(r.peers);
-                        notifyDataSetChanged();
-                    }
-                }));
-            }
+            sponsoredQuery = null;
         }
         if (TextUtils.isEmpty(query)) {
             filteredRecentQuery = null;
@@ -1164,7 +1234,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             searchWas = false;
             lastSearchId = 0;
             waitingResponseCount = 0;
-            globalSearchCollapsed = true;
+            globalSearchCollapsed = false;
             phoneCollapsed = true;
             if (delegate != null) {
                 delegate.searchStateChanged(false, true);
@@ -1195,7 +1265,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                     for (int a = 0; a < hashtags.size(); a++) {
                         searchResultHashtags.add(hashtags.get(a).hashtag);
                     }
-                    globalSearchCollapsed = true;
+                    globalSearchCollapsed = false;
                     phoneCollapsed = true;
                     waitingResponseCount = 0;
                     notifyDataSetChanged();
@@ -1210,7 +1280,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             lastSearchId++;
             final int searchId = lastSearchId;
             waitingResponseCount = 3;
-            globalSearchCollapsed = true;
+            globalSearchCollapsed = false;
             phoneCollapsed = true;
             notifyDataSetChanged();
             if (delegate != null) {
@@ -1313,6 +1383,18 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                             MessagesController.getInstance(currentAccount).putChats(msgs.chats, false);
                             for (int i = 0; i < msgs.messages.size(); ++i) {
                                 TLRPC.Message msg = msgs.messages.get(i);
+                                long did = MessageObject.getDialogId(msg);
+                                if (org.telegram.messenger.SharedConfig.searchHideJoined) {
+                                    if (did < 0) {
+                                        TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-did);
+                                        if (chat != null && !ChatObject.isNotInChat(chat)) {
+                                            continue;
+                                        }
+                                    }
+                                    if (MessagesController.getInstance(currentAccount).dialogs_dict.get(did) != null) {
+                                        continue;
+                                    }
+                                }
                                 publicPosts.add(new MessageObject(currentAccount, msg, false, true));
                             }
                             if (delegate != null) {
@@ -1705,6 +1787,9 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     private boolean hasHints() {
+        if (dialogsActivity != null && dialogsActivity.isHiddenChats()) {
+            return false;
+        }
         return !searchWas && !MediaDataController.getInstance(currentAccount).hints.isEmpty() && (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT || dialogsActivity.allowUsers);
     }
 
@@ -2187,7 +2272,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         return sb;
     }
 
-    boolean globalSearchCollapsed = true;
+    boolean globalSearchCollapsed = false;
     boolean phoneCollapsed = true;
 
     @Override

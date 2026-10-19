@@ -30,6 +30,10 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.util.TypedValue;
 
 import androidx.collection.LongSparseArray;
 import androidx.core.content.ContextCompat;
@@ -84,6 +88,7 @@ import org.telegram.ui.Components.ItemOptions;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RadialProgressView;
 import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.Components.ScaleStateListAnimator;
 import org.telegram.ui.Components.SlideChooseView;
 import org.telegram.ui.Components.StickerEmptyView;
 import org.telegram.ui.Components.UndoView;
@@ -200,6 +205,54 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
     private int botEndRow;
     private int membersHeaderRow;
     private int loadingProgressRow;
+    // Moagram / TeleClient 6-Tier Categorized Lists & Crawler
+    private ArrayList<TLObject> onlineParticipants = new ArrayList<>();
+    private ArrayList<TLObject> offlineParticipants = new ArrayList<>();
+    private ArrayList<TLObject> recentlyParticipants = new ArrayList<>();
+    private ArrayList<TLObject> lastWeekParticipants = new ArrayList<>();
+    private ArrayList<TLObject> lastMonthParticipants = new ArrayList<>();
+    private ArrayList<TLObject> longTimeAgoParticipants = new ArrayList<>();
+
+    private int crawlMembersRow = -1;
+    private int onlineHeaderRow = -1;
+    private int onlineStartRow = -1;
+    private int onlineEndRow = -1;
+    private int offlineHeaderRow = -1;
+    private int offlineStartRow = -1;
+    private int offlineEndRow = -1;
+    private int recentlyHeaderRow = -1;
+    private int recentlyStartRow = -1;
+    private int recentlyEndRow = -1;
+    private int lastWeekHeaderRow = -1;
+    private int lastWeekStartRow = -1;
+    private int lastWeekEndRow = -1;
+    private int lastMonthHeaderRow = -1;
+    private int lastMonthStartRow = -1;
+    private int lastMonthEndRow = -1;
+    private int longTimeAgoHeaderRow = -1;
+    private int longTimeAgoStartRow = -1;
+    private int longTimeAgoEndRow = -1;
+
+    private boolean crawlingActive = false;
+    private int crawlCharIndex = 0;
+    private static final String CRAWL_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
+    private String crawlProgressText = null;
+    private int crawlBatchesSinceUiRefresh;
+    private final Runnable refreshMemberCategoriesRunnable = () -> {
+        if (type != TYPE_USERS || fragmentView == null) {
+            return;
+        }
+        updateRows();
+        if (listViewAdapter != null) {
+            listViewAdapter.notifyDataSetChanged();
+        }
+    };
+
+    // Moagram / TeleClient Category Filter Chips
+    private HorizontalScrollView filterScrollView;
+    private LinearLayout filtersContainer;
+    private View filtersDivider;
+    private int selectedCategoryPriority = -1; // -1 = All, 0 = Online, 1 = Offline, 2 = Recently, 3 = LastWeek, 4 = LastMonth, 5 = LongTimeAgo
 
     private int participantsInfoRow;
     private int blockedEmptyRow;
@@ -395,6 +448,25 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
         priceHeaderRow = -1;
         priceRow = -1;
         priceInfoRow = -1;
+        crawlMembersRow = -1;
+        onlineHeaderRow = -1;
+        onlineStartRow = -1;
+        onlineEndRow = -1;
+        offlineHeaderRow = -1;
+        offlineStartRow = -1;
+        offlineEndRow = -1;
+        recentlyHeaderRow = -1;
+        recentlyStartRow = -1;
+        recentlyEndRow = -1;
+        lastWeekHeaderRow = -1;
+        lastWeekStartRow = -1;
+        lastWeekEndRow = -1;
+        lastMonthHeaderRow = -1;
+        lastMonthStartRow = -1;
+        lastMonthEndRow = -1;
+        longTimeAgoHeaderRow = -1;
+        longTimeAgoStartRow = -1;
+        longTimeAgoEndRow = -1;
 
         rowCount = 0;
         if (type == TYPE_KICKED) {
@@ -578,29 +650,59 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
             if (selectType == SELECT_TYPE_MEMBERS && ChatObject.canUserDoAdminAction(currentChat, ChatObject.ACTION_INVITE)) {
                 addNew2Row = rowCount++;
             }
+            if (selectType == SELECT_TYPE_MEMBERS && ChatObject.isChannel(currentChat)) {
+                crawlMembersRow = rowCount++;
+            }
             if (!(loadingUsers && !firstLoaded)) {
-                boolean hasAnyOther = false;
-                if (!contacts.isEmpty()) {
+                categorizeAndSortParticipants();
+
+                if (selectedCategoryPriority == -1 && !contacts.isEmpty()) {
                     contactsHeaderRow = rowCount++;
                     contactsStartRow = rowCount;
                     rowCount += contacts.size();
                     contactsEndRow = rowCount;
-                    hasAnyOther = true;
                 }
-                if (!bots.isEmpty()) {
+                if (selectedCategoryPriority == -1 && !bots.isEmpty()) {
                     botHeaderRow = rowCount++;
                     botStartRow = rowCount;
                     rowCount += bots.size();
                     botEndRow = rowCount;
-                    hasAnyOther = true;
                 }
-                if (!participants.isEmpty()) {
-                    if (hasAnyOther) {
-                        membersHeaderRow = rowCount++;
-                    }
-                    participantsStartRow = rowCount;
-                    rowCount += participants.size();
-                    participantsEndRow = rowCount;
+                if ((selectedCategoryPriority == -1 || selectedCategoryPriority == 0) && !onlineParticipants.isEmpty()) {
+                    onlineHeaderRow = rowCount++;
+                    onlineStartRow = rowCount;
+                    rowCount += onlineParticipants.size();
+                    onlineEndRow = rowCount;
+                }
+                if ((selectedCategoryPriority == -1 || selectedCategoryPriority == 1) && !offlineParticipants.isEmpty()) {
+                    offlineHeaderRow = rowCount++;
+                    offlineStartRow = rowCount;
+                    rowCount += offlineParticipants.size();
+                    offlineEndRow = rowCount;
+                }
+                if ((selectedCategoryPriority == -1 || selectedCategoryPriority == 2) && !recentlyParticipants.isEmpty()) {
+                    recentlyHeaderRow = rowCount++;
+                    recentlyStartRow = rowCount;
+                    rowCount += recentlyParticipants.size();
+                    recentlyEndRow = rowCount;
+                }
+                if ((selectedCategoryPriority == -1 || selectedCategoryPriority == 3) && !lastWeekParticipants.isEmpty()) {
+                    lastWeekHeaderRow = rowCount++;
+                    lastWeekStartRow = rowCount;
+                    rowCount += lastWeekParticipants.size();
+                    lastWeekEndRow = rowCount;
+                }
+                if ((selectedCategoryPriority == -1 || selectedCategoryPriority == 4) && !lastMonthParticipants.isEmpty()) {
+                    lastMonthHeaderRow = rowCount++;
+                    lastMonthStartRow = rowCount;
+                    rowCount += lastMonthParticipants.size();
+                    lastMonthEndRow = rowCount;
+                }
+                if ((selectedCategoryPriority == -1 || selectedCategoryPriority == 5) && !longTimeAgoParticipants.isEmpty()) {
+                    longTimeAgoHeaderRow = rowCount++;
+                    longTimeAgoStartRow = rowCount;
+                    rowCount += longTimeAgoParticipants.size();
+                    longTimeAgoEndRow = rowCount;
                 }
                 if (rowCount != 0) {
                     participantsInfoRow = rowCount++;
@@ -612,6 +714,8 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                 loadingUserCellRow = rowCount++;
             }
         }
+        updateSubtitle();
+        updateCategoryFilterTabs();
     }
 
     @Override
@@ -619,6 +723,7 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
         super.onFragmentCreate();
         getNotificationCenter().addObserver(this, NotificationCenter.chatInfoDidLoad);
         getNotificationCenter().addObserver(this, NotificationCenter.dialogDeleted);
+        getNotificationCenter().addObserver(this, NotificationCenter.updateInterfaces);
         loadChatParticipants(0, 200);
         return true;
     }
@@ -626,8 +731,11 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
     @Override
     public void onFragmentDestroy() {
         super.onFragmentDestroy();
+        stopCrawling();
+        AndroidUtilities.cancelRunOnUIThread(refreshMemberCategoriesRunnable);
         getNotificationCenter().removeObserver(this, NotificationCenter.chatInfoDidLoad);
         getNotificationCenter().removeObserver(this, NotificationCenter.dialogDeleted);
+        getNotificationCenter().removeObserver(this, NotificationCenter.updateInterfaces);
     }
 
     @Override
@@ -678,6 +786,15 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                 @Override
                 public void onSearchExpand() {
                     searching = true;
+                    if (filterScrollView != null) {
+                        filterScrollView.setVisibility(View.GONE);
+                    }
+                    if (filtersDivider != null) {
+                        filtersDivider.setVisibility(View.GONE);
+                    }
+                    if (listView != null) {
+                        listView.setPadding(0, 0, 0, 0);
+                    }
                     if (doneItem != null) {
                         doneItem.setVisibility(View.GONE);
                     }
@@ -692,6 +809,15 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                     listViewAdapter.notifyDataSetChanged();
                     listView.setFastScrollVisible(true);
                     listView.setVerticalScrollBarEnabled(false);
+                    if (filterScrollView != null && selectType == SELECT_TYPE_MEMBERS && type == TYPE_USERS && participants != null && !participants.isEmpty()) {
+                        filterScrollView.setVisibility(View.VISIBLE);
+                        if (filtersDivider != null) {
+                            filtersDivider.setVisibility(View.VISIBLE);
+                        }
+                        if (listView != null) {
+                            listView.setPadding(0, AndroidUtilities.dp(44), 0, 0);
+                        }
+                    }
                     if (doneItem != null) {
                         doneItem.setVisibility(View.VISIBLE);
                     }
@@ -827,8 +953,25 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
         listView.setAnimateEmptyView(true, RecyclerListView.EMPTY_VIEW_ANIMATION_TYPE_ALPHA);
         listView.setAdapter(listViewAdapter = new ListAdapter(context));
         listView.setVerticalScrollbarPosition(LocaleController.isRTL ? RecyclerListView.SCROLLBAR_POSITION_LEFT : RecyclerListView.SCROLLBAR_POSITION_RIGHT);
+        listView.setClipToPadding(false);
         frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         actionBar.setAdaptiveBackground(listView);
+
+        filtersContainer = new LinearLayout(context);
+        filtersContainer.setPadding(AndroidUtilities.dp(12), 0, AndroidUtilities.dp(12), 0);
+        filtersContainer.setOrientation(LinearLayout.HORIZONTAL);
+
+        filterScrollView = new HorizontalScrollView(context);
+        filterScrollView.setHorizontalScrollBarEnabled(false);
+        filterScrollView.addView(filtersContainer, LayoutHelper.createScroll(LayoutHelper.WRAP_CONTENT, LayoutHelper.MATCH_PARENT, Gravity.CENTER_VERTICAL));
+        filterScrollView.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
+        filterScrollView.setVisibility(View.GONE);
+        frameLayout.addView(filterScrollView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 44, Gravity.TOP | Gravity.FILL_HORIZONTAL));
+
+        filtersDivider = new View(context);
+        filtersDivider.setBackgroundColor(getThemedColor(Theme.key_divider));
+        filtersDivider.setVisibility(View.GONE);
+        frameLayout.addView(filtersDivider, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 1.0f / AndroidUtilities.density, Gravity.TOP | Gravity.FILL_HORIZONTAL, 0, 44, 0, 0));
 
         listView.setOnItemClickListener((view, position, x, y) -> {
             boolean listAdapter = listView.getAdapter() == listViewAdapter;
@@ -908,6 +1051,17 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                     DiffCallback diffCallback = saveState();
                     updateRows();
                     updateListAnimated(diffCallback);
+                } else if (position == crawlMembersRow) {
+                    if (crawlingActive) {
+                        stopCrawling();
+                    } else if (isCrawlingComplete()) {
+                        if (BulletinFactory.canShowBulletin(this)) {
+                            BulletinFactory.of(this).createSimpleBulletin("All members loaded", "Total members: " + getLoadedMembersCount()).show();
+                        }
+                    } else {
+                        startCrawling();
+                    }
+                    return;
                 } else if (position == addNewRow) {
                     if (type == TYPE_BANNED || type == TYPE_KICKED) {
                         Bundle bundle = new Bundle();
@@ -1360,6 +1514,9 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                             args.putLong("user_id", peerId);
                         } else {
                             args.putLong("chat_id", -peerId);
+                        }
+                        if (chatId != 0) {
+                            args.putLong("from_chat_id", chatId);
                         }
                         presentFragment(new ProfileActivity(args));
                     } else {
@@ -2077,6 +2234,14 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                     removeSelfFromStack();
                 }
             }
+        } else if (id == NotificationCenter.updateInterfaces) {
+            int mask = (Integer) args[0];
+            if ((mask & MessagesController.UPDATE_MASK_STATUS) != 0 || (mask & MessagesController.UPDATE_MASK_CHAT_MEMBERS) != 0) {
+                if (type == TYPE_USERS) {
+                    AndroidUtilities.cancelRunOnUIThread(refreshMemberCategoriesRunnable);
+                    AndroidUtilities.runOnUIThread(refreshMemberCategoriesRunnable, 500);
+                }
+            }
         }
     }
 
@@ -2571,6 +2736,12 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                         } else {
                             objects = participants;
                             map = participantsMap;
+                            if (res.participants.size() < 200) {
+                                crawlRecentExhausted = true;
+                            } else {
+                                crawlRecentExhausted = false;
+                                crawlRecentOffset = 200;
+                            }
                         }
                     } else {
                         objects = participants;
@@ -2629,6 +2800,11 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                     showItemsAnimated(listViewAdapter != null ? listViewAdapter.getItemCount() : 0);
                     loadingUsers = false;
                     firstLoaded = true;
+                    if (type == TYPE_USERS && selectType == SELECT_TYPE_MEMBERS && !crawlingActive) {
+                        if (!isCrawlingComplete()) {
+                            startCrawling();
+                        }
+                    }
                     if (searchItem != null) {
                         searchItem.setVisibility(type != TYPE_BANNED || firstLoaded && objectsCount > 5 ? View.VISIBLE : View.GONE);
                     }
@@ -2715,6 +2891,516 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
             }
             return 0;
         });
+    }
+
+    private int getUserStatusPriority(TLRPC.User user, int currentTime) {
+        if (user == null || user.status == null) {
+            return 5;
+        }
+        if (user.self || user.status instanceof TLRPC.TL_userStatusOnline || user.status.expires > currentTime) {
+            return 0;
+        }
+        if (user.status instanceof TLRPC.TL_userStatusOffline) {
+            return 1;
+        }
+        if (user.status instanceof TLRPC.TL_userStatusRecently) {
+            return 2;
+        }
+        if (user.status instanceof TLRPC.TL_userStatusLastWeek) {
+            return 3;
+        }
+        if (user.status instanceof TLRPC.TL_userStatusLastMonth) {
+            return 4;
+        }
+        return 5;
+    }
+
+    private int getUserExpires(TLObject object, int currentTime) {
+        long peerId = 0;
+        if (object instanceof TLRPC.ChannelParticipant) {
+            peerId = MessageObject.getPeerId(((TLRPC.ChannelParticipant) object).peer);
+        } else if (object instanceof TLRPC.ChatParticipant) {
+            peerId = ((TLRPC.ChatParticipant) object).user_id;
+        } else if (object instanceof TLRPC.User) {
+            peerId = ((TLRPC.User) object).id;
+        }
+        TLRPC.User user = getMessagesController().getUser(peerId);
+        if (user != null) {
+            if (user.self) return currentTime + 50000;
+            if (user.status != null) return user.status.expires;
+        }
+        return 0;
+    }
+
+    private int getUserWasOnline(TLObject object) {
+        long peerId = 0;
+        if (object instanceof TLRPC.ChannelParticipant) {
+            peerId = MessageObject.getPeerId(((TLRPC.ChannelParticipant) object).peer);
+        } else if (object instanceof TLRPC.ChatParticipant) {
+            peerId = ((TLRPC.ChatParticipant) object).user_id;
+        } else if (object instanceof TLRPC.User) {
+            peerId = ((TLRPC.User) object).id;
+        }
+        TLRPC.User user = getMessagesController().getUser(peerId);
+        if (user != null && user.status instanceof TLRPC.TL_userStatusOffline) {
+            return user.status.expires;
+        }
+        return 0;
+    }
+
+    private void categorizeAndSortParticipants() {
+        onlineParticipants.clear();
+        offlineParticipants.clear();
+        recentlyParticipants.clear();
+        lastWeekParticipants.clear();
+        lastMonthParticipants.clear();
+        longTimeAgoParticipants.clear();
+
+        int currentTime = getConnectionsManager().getCurrentTime();
+        for (int i = 0; i < participants.size(); i++) {
+            TLObject object = participants.get(i);
+            long peerId = 0;
+            if (object instanceof TLRPC.ChannelParticipant) {
+                peerId = MessageObject.getPeerId(((TLRPC.ChannelParticipant) object).peer);
+            } else if (object instanceof TLRPC.ChatParticipant) {
+                peerId = ((TLRPC.ChatParticipant) object).user_id;
+            } else if (object instanceof TLRPC.User) {
+                peerId = ((TLRPC.User) object).id;
+            }
+            TLRPC.User user = getMessagesController().getUser(peerId);
+            int priority = getUserStatusPriority(user, currentTime);
+            switch (priority) {
+                case 0:
+                    onlineParticipants.add(object);
+                    break;
+                case 1:
+                    offlineParticipants.add(object);
+                    break;
+                case 2:
+                    recentlyParticipants.add(object);
+                    break;
+                case 3:
+                    lastWeekParticipants.add(object);
+                    break;
+                case 4:
+                    lastMonthParticipants.add(object);
+                    break;
+                case 5:
+                default:
+                    longTimeAgoParticipants.add(object);
+                    break;
+            }
+        }
+
+        Collections.sort(onlineParticipants, (lhs, rhs) -> {
+            int exp1 = getUserExpires(lhs, currentTime);
+            int exp2 = getUserExpires(rhs, currentTime);
+            return Integer.compare(exp2, exp1);
+        });
+
+        Collections.sort(offlineParticipants, (lhs, rhs) -> {
+            int was1 = getUserWasOnline(lhs);
+            int was2 = getUserWasOnline(rhs);
+            return Integer.compare(was2, was1);
+        });
+    }
+
+    private int getLoadedMembersCount() {
+        int count = participants != null ? participants.size() : 0;
+        if (contacts != null) {
+            count += contacts.size();
+        }
+        if (bots != null) {
+            count += bots.size();
+        }
+        return count;
+    }
+
+    private int getTotalMembersCount() {
+        int total = currentChat != null ? currentChat.participants_count : 0;
+        if (info != null && info.participants_count > total) {
+            total = info.participants_count;
+        }
+        return total;
+    }
+
+    private boolean areAllMembersLoaded() {
+        int total = getTotalMembersCount();
+        int loaded = getLoadedMembersCount();
+        return total > 0 && (loaded >= total || loaded + 1 >= total);
+    }
+
+    private boolean isCrawlingComplete() {
+        if (areAllMembersLoaded()) {
+            return true;
+        }
+        int total = getTotalMembersCount();
+        if (crawlRecentExhausted && total <= 10000) {
+            return true;
+        }
+        return false;
+    }
+
+    private void updateSubtitle() {
+        if (actionBar == null || selectType != SELECT_TYPE_MEMBERS || type != TYPE_USERS) {
+            return;
+        }
+        int total = getTotalMembersCount();
+        int loaded = getLoadedMembersCount();
+        int displayLoaded = (total > 0 && loaded + 1 == total) ? total : loaded;
+        if (total > 0) {
+            actionBar.setSubtitle(String.format(Locale.US, "%,d / %,d loaded", displayLoaded, total));
+        } else if (loaded > 0) {
+            actionBar.setSubtitle(String.format(Locale.US, "%,d loaded", loaded));
+        } else {
+            actionBar.setSubtitle(null);
+        }
+    }
+
+    private void updateCategoryFilterTabs() {
+        if (filterScrollView == null || filtersContainer == null) {
+            return;
+        }
+        if (selectType != SELECT_TYPE_MEMBERS || type != TYPE_USERS || participants == null || participants.isEmpty() || searching) {
+            filterScrollView.setVisibility(View.GONE);
+            if (filtersDivider != null) {
+                filtersDivider.setVisibility(View.GONE);
+            }
+            if (listView != null && !searching) {
+                listView.setPadding(0, 0, 0, 0);
+            }
+            return;
+        }
+
+        filterScrollView.setVisibility(View.VISIBLE);
+        if (filtersDivider != null) {
+            filtersDivider.setVisibility(View.VISIBLE);
+        }
+        if (listView != null) {
+            listView.setPadding(0, AndroidUtilities.dp(44), 0, 0);
+        }
+
+        // Validate selected category
+        if (selectedCategoryPriority == 0 && onlineParticipants.isEmpty()
+                || selectedCategoryPriority == 1 && offlineParticipants.isEmpty()
+                || selectedCategoryPriority == 2 && recentlyParticipants.isEmpty()
+                || selectedCategoryPriority == 3 && lastWeekParticipants.isEmpty()
+                || selectedCategoryPriority == 4 && lastMonthParticipants.isEmpty()
+                || selectedCategoryPriority == 5 && longTimeAgoParticipants.isEmpty()) {
+            selectedCategoryPriority = -1;
+        }
+
+        Context context = filterScrollView.getContext();
+        filtersContainer.removeAllViews();
+
+        int totalCount = participants.size();
+        addFilterChip(context, -1, "All", totalCount);
+        if (!onlineParticipants.isEmpty()) {
+            addFilterChip(context, 0, "Online Now", onlineParticipants.size());
+        }
+        if (!offlineParticipants.isEmpty()) {
+            addFilterChip(context, 1, "Offline", offlineParticipants.size());
+        }
+        if (!recentlyParticipants.isEmpty()) {
+            addFilterChip(context, 2, "Recently", recentlyParticipants.size());
+        }
+        if (!lastWeekParticipants.isEmpty()) {
+            addFilterChip(context, 3, "Last Week", lastWeekParticipants.size());
+        }
+        if (!lastMonthParticipants.isEmpty()) {
+            addFilterChip(context, 4, "Last Month", lastMonthParticipants.size());
+        }
+        if (!longTimeAgoParticipants.isEmpty()) {
+            addFilterChip(context, 5, "Long Time Ago", longTimeAgoParticipants.size());
+        }
+    }
+
+    private void addFilterChip(Context context, int priorityId, String label, int count) {
+        boolean selected = (priorityId == selectedCategoryPriority);
+        TextView chip = new TextView(context);
+        chip.setText(String.format(Locale.US, "%s (%,d)", label, count));
+        chip.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        chip.setTypeface(AndroidUtilities.bold());
+        chip.setGravity(Gravity.CENTER);
+        chip.setPadding(AndroidUtilities.dp(12), AndroidUtilities.dp(4), AndroidUtilities.dp(12), AndroidUtilities.dp(4));
+
+        int accentColor = getThemedColor(Theme.key_featuredStickers_addButton);
+        if (selected) {
+            chip.setTextColor(0xFFFFFFFF);
+            chip.setBackground(Theme.createSimpleSelectorRoundRectDrawable(
+                    AndroidUtilities.dp(14),
+                    accentColor,
+                    Theme.multAlpha(accentColor, 0.85f)
+            ));
+        } else {
+            chip.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlackText));
+            chip.setBackground(Theme.createSimpleSelectorRoundRectDrawable(
+                    AndroidUtilities.dp(14),
+                    Theme.multAlpha(getThemedColor(Theme.key_windowBackgroundWhiteBlackText), 0.08f),
+                    Theme.multAlpha(getThemedColor(Theme.key_windowBackgroundWhiteBlackText), 0.16f)
+            ));
+        }
+        ScaleStateListAnimator.apply(chip);
+        chip.setOnClickListener(v -> {
+            if (selectedCategoryPriority != priorityId) {
+                selectedCategoryPriority = priorityId;
+                updateRows();
+                if (listViewAdapter != null) {
+                    listViewAdapter.notifyDataSetChanged();
+                }
+                if (listView != null) {
+                    listView.scrollToPosition(0);
+                }
+                int left = chip.getLeft();
+                int right = chip.getRight();
+                int scrollX = filterScrollView.getScrollX();
+                int width = filterScrollView.getWidth();
+                if (left < scrollX) {
+                    filterScrollView.smoothScrollTo(Math.max(0, left - AndroidUtilities.dp(16)), 0);
+                } else if (right > scrollX + width) {
+                    filterScrollView.smoothScrollTo(right - width + AndroidUtilities.dp(16), 0);
+                }
+            }
+        });
+
+        LinearLayout.LayoutParams lp = LayoutHelper.createLinear(
+                LayoutHelper.WRAP_CONTENT,
+                LayoutHelper.WRAP_CONTENT,
+                Gravity.CENTER_VERTICAL,
+                0, 0, 6, 0
+        );
+        filtersContainer.addView(chip, lp);
+    }
+
+    private int crawlRecentOffset = 200;
+    private boolean crawlRecentExhausted = false;
+
+    private void finishCrawling() {
+        crawlingActive = false;
+        int loaded = getLoadedMembersCount();
+        int total = getTotalMembersCount();
+        if (total > 0) {
+            crawlProgressText = "All members loaded (" + loaded + "/" + total + ")";
+        } else {
+            crawlProgressText = "All members loaded (" + loaded + " total)";
+        }
+        if (BulletinFactory.canShowBulletin(this)) {
+            BulletinFactory.of(this).createSimpleBulletin("Crawling complete!", "Total members: " + loaded).show();
+        }
+        updateSubtitle();
+        updateRows();
+        if (listViewAdapter != null) {
+            listViewAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void startCrawling() {
+        if (crawlingActive || currentChat == null || !ChatObject.isChannel(currentChat)) {
+            return;
+        }
+        if (isCrawlingComplete()) {
+            return;
+        }
+        crawlingActive = true;
+        crawlCharIndex = 0;
+        crawlRecentOffset = 200;
+        crawlRecentExhausted = false;
+        crawlBatchesSinceUiRefresh = 0;
+        int loaded = getLoadedMembersCount();
+        int total = getTotalMembersCount();
+        if (total > 0) {
+            crawlProgressText = "Loading all members... (" + loaded + "/" + total + ")";
+        } else {
+            crawlProgressText = "Loading all members...";
+        }
+        updateRows();
+        if (listViewAdapter != null) {
+            listViewAdapter.notifyDataSetChanged();
+        }
+        executeCrawlNext();
+    }
+
+    private void stopCrawling() {
+        crawlingActive = false;
+        crawlProgressText = null;
+        updateRows();
+        if (listViewAdapter != null) {
+            listViewAdapter.notifyDataSetChanged();
+        }
+    }
+
+    private void executeCrawlNext() {
+        if (!crawlingActive || currentChat == null) return;
+
+        if (isCrawlingComplete()) {
+            finishCrawling();
+            return;
+        }
+
+        TLRPC.InputChannel inputChannel = getMessagesController().getInputChannel(chatId);
+        if (inputChannel == null) {
+            stopCrawling();
+            return;
+        }
+
+        if (!crawlRecentExhausted) {
+            int loaded = getLoadedMembersCount();
+            int total = getTotalMembersCount();
+            if (total > 0) {
+                crawlProgressText = "Loading members... (" + loaded + "/" + total + ")";
+            } else {
+                crawlProgressText = "Loading members... (" + loaded + " loaded)";
+            }
+            if (listViewAdapter != null && crawlMembersRow >= 0) {
+                listViewAdapter.notifyItemChanged(crawlMembersRow);
+            }
+
+            TLRPC.TL_channels_getParticipants req = new TLRPC.TL_channels_getParticipants();
+            req.channel = inputChannel;
+            req.filter = new TLRPC.TL_channelParticipantsRecent();
+            req.offset = crawlRecentOffset;
+            req.limit = 200;
+            req.hash = 0;
+
+            int requestId = getConnectionsManager().sendRequest(req, (response, error) -> {
+                AndroidUtilities.runOnUIThread(() -> {
+                    if (!crawlingActive) return;
+                    if (error == null && response instanceof TLRPC.TL_channels_channelParticipants) {
+                        TLRPC.TL_channels_channelParticipants res = (TLRPC.TL_channels_channelParticipants) response;
+                        getMessagesController().putUsers(res.users, false);
+                        getMessagesController().putChats(res.chats, false);
+                        long selfId = getUserConfig().getClientUserId();
+                        int addedCount = 0;
+                        for (int i = 0; i < res.participants.size(); i++) {
+                            TLRPC.ChannelParticipant p = res.participants.get(i);
+                            long peer = MessageObject.getPeerId(p.peer);
+                            if (peer != selfId && participantsMap.indexOfKey(peer) < 0 && contactsMap.indexOfKey(peer) < 0 && botsMap.indexOfKey(peer) < 0) {
+                                participants.add(p);
+                                participantsMap.put(peer, p);
+                                addedCount++;
+                            }
+                        }
+                        if (addedCount > 0) {
+                            crawlBatchesSinceUiRefresh++;
+                            if (crawlBatchesSinceUiRefresh >= 5) {
+                                crawlBatchesSinceUiRefresh = 0;
+                                updateRows();
+                                if (listViewAdapter != null) {
+                                    listViewAdapter.notifyDataSetChanged();
+                                }
+                            }
+                        }
+                        if (res.participants.size() < 200) {
+                            crawlRecentExhausted = true;
+                        } else {
+                            crawlRecentOffset += res.participants.size();
+                        }
+                    } else if (error != null && error.text != null && error.text.startsWith("FLOOD_WAIT_")) {
+                        int seconds = Utilities.parseInt(error.text);
+                        if (seconds <= 0) seconds = 5;
+                        crawlProgressText = "Rate limited. Pausing " + seconds + "s...";
+                        updateRows();
+                        if (listViewAdapter != null) {
+                            listViewAdapter.notifyDataSetChanged();
+                        }
+                        AndroidUtilities.runOnUIThread(this::executeCrawlNext, (seconds + 1) * 1000);
+                        return;
+                    } else {
+                        crawlRecentExhausted = true;
+                    }
+
+                    if (isCrawlingComplete()) {
+                        finishCrawling();
+                        return;
+                    }
+
+                    if (crawlingActive) {
+                        AndroidUtilities.runOnUIThread(this::executeCrawlNext, 350);
+                    }
+                });
+            });
+            getConnectionsManager().bindRequestToGuid(requestId, classGuid);
+            return;
+        }
+
+        if (isCrawlingComplete() || crawlCharIndex >= CRAWL_CHARS.length()) {
+            finishCrawling();
+            return;
+        }
+
+        String query = String.valueOf(CRAWL_CHARS.charAt(crawlCharIndex));
+        int loaded = getLoadedMembersCount();
+        int total = getTotalMembersCount();
+        if (total > 0) {
+            crawlProgressText = "Searching '" + query + "'... (" + loaded + "/" + total + ")";
+        } else {
+            crawlProgressText = "Searching '" + query + "'... (" + loaded + " loaded)";
+        }
+        if (listViewAdapter != null && crawlMembersRow >= 0) {
+            listViewAdapter.notifyItemChanged(crawlMembersRow);
+        }
+
+        TLRPC.TL_channels_getParticipants req = new TLRPC.TL_channels_getParticipants();
+        req.channel = inputChannel;
+        TLRPC.TL_channelParticipantsSearch filter = new TLRPC.TL_channelParticipantsSearch();
+        filter.q = query;
+        req.filter = filter;
+        req.offset = 0;
+        req.limit = 200;
+        req.hash = 0;
+
+        int requestId = getConnectionsManager().sendRequest(req, (response, error) -> {
+            AndroidUtilities.runOnUIThread(() -> {
+                if (!crawlingActive) return;
+                if (error == null && response instanceof TLRPC.TL_channels_channelParticipants) {
+                    TLRPC.TL_channels_channelParticipants res = (TLRPC.TL_channels_channelParticipants) response;
+                    getMessagesController().putUsers(res.users, false);
+                    getMessagesController().putChats(res.chats, false);
+                    long selfId = getUserConfig().getClientUserId();
+                    int addedCount = 0;
+                    for (int i = 0; i < res.participants.size(); i++) {
+                        TLRPC.ChannelParticipant p = res.participants.get(i);
+                        long peer = MessageObject.getPeerId(p.peer);
+                        if (peer != selfId && participantsMap.indexOfKey(peer) < 0 && contactsMap.indexOfKey(peer) < 0 && botsMap.indexOfKey(peer) < 0) {
+                            participants.add(p);
+                            participantsMap.put(peer, p);
+                            addedCount++;
+                        }
+                    }
+                    if (addedCount > 0) {
+                        crawlBatchesSinceUiRefresh++;
+                        if (crawlBatchesSinceUiRefresh >= 5) {
+                            crawlBatchesSinceUiRefresh = 0;
+                            updateRows();
+                            if (listViewAdapter != null) {
+                                listViewAdapter.notifyDataSetChanged();
+                            }
+                        }
+                    }
+                } else if (error != null && error.text != null && error.text.startsWith("FLOOD_WAIT_")) {
+                    int seconds = Utilities.parseInt(error.text);
+                    if (seconds <= 0) seconds = 5;
+                    crawlProgressText = "Rate limited. Pausing " + seconds + "s...";
+                    updateRows();
+                    if (listViewAdapter != null) {
+                        listViewAdapter.notifyDataSetChanged();
+                    }
+                    AndroidUtilities.runOnUIThread(this::executeCrawlNext, (seconds + 1) * 1000);
+                    return;
+                }
+
+                if (isCrawlingComplete()) {
+                    finishCrawling();
+                    return;
+                }
+
+                crawlCharIndex++;
+                if (crawlingActive) {
+                    AndroidUtilities.runOnUIThread(this::executeCrawlNext, 350);
+                }
+            });
+        });
+        getConnectionsManager().bindRequestToGuid(requestId, classGuid);
     }
 
     @Override
@@ -3439,7 +4125,25 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                     int lastRow;
 
                     boolean showJoined = false;
-                    if (position >= participantsStartRow && position < participantsEndRow) {
+                    if (position >= onlineStartRow && position < onlineEndRow) {
+                        lastRow = onlineEndRow;
+                        showJoined = ChatObject.isChannel(currentChat) && !currentChat.megagroup;
+                    } else if (position >= offlineStartRow && position < offlineEndRow) {
+                        lastRow = offlineEndRow;
+                        showJoined = ChatObject.isChannel(currentChat) && !currentChat.megagroup;
+                    } else if (position >= recentlyStartRow && position < recentlyEndRow) {
+                        lastRow = recentlyEndRow;
+                        showJoined = ChatObject.isChannel(currentChat) && !currentChat.megagroup;
+                    } else if (position >= lastWeekStartRow && position < lastWeekEndRow) {
+                        lastRow = lastWeekEndRow;
+                        showJoined = ChatObject.isChannel(currentChat) && !currentChat.megagroup;
+                    } else if (position >= lastMonthStartRow && position < lastMonthEndRow) {
+                        lastRow = lastMonthEndRow;
+                        showJoined = ChatObject.isChannel(currentChat) && !currentChat.megagroup;
+                    } else if (position >= longTimeAgoStartRow && position < longTimeAgoEndRow) {
+                        lastRow = longTimeAgoEndRow;
+                        showJoined = ChatObject.isChannel(currentChat) && !currentChat.megagroup;
+                    } else if (position >= participantsStartRow && position < participantsEndRow) {
                         lastRow = participantsEndRow;
                         showJoined = ChatObject.isChannel(currentChat) && !currentChat.megagroup;
                     } else if (position >= contactsStartRow && position < contactsEndRow) {
@@ -3623,6 +4327,15 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                     } else if (position == gigaConvertRow) {
                         actionCell.setColors(Theme.key_windowBackgroundWhiteBlueIcon, Theme.key_windowBackgroundWhiteBlueButton);
                         actionCell.setText(getString("BroadcastGroupConvert", R.string.BroadcastGroupConvert), null, R.drawable.msg_channel, false);
+                    } else if (position == crawlMembersRow) {
+                        actionCell.setColors(Theme.key_windowBackgroundWhiteBlueIcon, Theme.key_windowBackgroundWhiteBlueButton);
+                        if (crawlingActive) {
+                            actionCell.setText(crawlProgressText != null ? crawlProgressText : "Crawling members...", null, R.drawable.msg_search, false);
+                        } else if (isCrawlingComplete()) {
+                            actionCell.setText("All Members Loaded (" + getLoadedMembersCount() + ")", null, R.drawable.msg_search, false);
+                        } else {
+                            actionCell.setText("Fetch All Members (Crawler)", null, R.drawable.msg_search, false);
+                        }
                     }
                     break;
                 case 3:
@@ -3731,6 +4444,18 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                         }
                     } else if (position == loadingHeaderRow) {
                         sectionCell.setText("");
+                    } else if (position == onlineHeaderRow) {
+                        sectionCell.setText("ONLINE (" + onlineParticipants.size() + ")");
+                    } else if (position == offlineHeaderRow) {
+                        sectionCell.setText("OFFLINE (" + offlineParticipants.size() + ")");
+                    } else if (position == recentlyHeaderRow) {
+                        sectionCell.setText("LAST SEEN RECENTLY (" + recentlyParticipants.size() + ")");
+                    } else if (position == lastWeekHeaderRow) {
+                        sectionCell.setText("LAST SEEN WITHIN A WEEK (" + lastWeekParticipants.size() + ")");
+                    } else if (position == lastMonthHeaderRow) {
+                        sectionCell.setText("LAST SEEN WITHIN A MONTH (" + lastMonthParticipants.size() + ")");
+                    } else if (position == longTimeAgoHeaderRow) {
+                        sectionCell.setText("LAST SEEN A LONG TIME AGO (" + longTimeAgoParticipants.size() + ")");
                     }
                     break;
                 case 11:
@@ -3814,11 +4539,17 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
 
         @Override
         public int getItemViewType(int position) {
-            if (position == addNewRow || position == addNew2Row || position == recentActionsRow || position == gigaConvertRow) {
+            if (position == addNewRow || position == addNew2Row || position == recentActionsRow || position == gigaConvertRow || position == crawlMembersRow) {
                 return 2;
             } else if (position >= participantsStartRow && position < participantsEndRow ||
                     position >= botStartRow && position < botEndRow ||
-                    position >= contactsStartRow && position < contactsEndRow) {
+                    position >= contactsStartRow && position < contactsEndRow ||
+                    position >= onlineStartRow && position < onlineEndRow ||
+                    position >= offlineStartRow && position < offlineEndRow ||
+                    position >= recentlyStartRow && position < recentlyEndRow ||
+                    position >= lastWeekStartRow && position < lastWeekEndRow ||
+                    position >= lastMonthStartRow && position < lastMonthEndRow ||
+                    position >= longTimeAgoStartRow && position < longTimeAgoEndRow) {
                 return 0;
             } else if (position == addNewSectionRow || position == participantsDividerRow || position == participantsDivider2Row) {
                 return 3;
@@ -3833,7 +4564,9 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
             } else if (position == changeInfoRow || position == addUsersRow || position == manageLinkedPeersRow || position == pinMessagesRow || position == editTagRow || position == sendMessagesRow ||
                     position == sendStickersRow || position == embedLinksRow || position == manageTopicsRow || position == dontRestrictBoostersRow) {
                 return 7;
-            } else if (position == membersHeaderRow || position == contactsHeaderRow || position == botHeaderRow || position == loadingHeaderRow) {
+            } else if (position == membersHeaderRow || position == contactsHeaderRow || position == botHeaderRow || position == loadingHeaderRow ||
+                    position == onlineHeaderRow || position == offlineHeaderRow || position == recentlyHeaderRow ||
+                    position == lastWeekHeaderRow || position == lastMonthHeaderRow || position == longTimeAgoHeaderRow) {
                 return 8;
             } else if (position == slowmodeSelectRow) {
                 return 9;
@@ -3858,7 +4591,19 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
         }
 
         public TLObject getItem(int position) {
-            if (position >= participantsStartRow && position < participantsEndRow) {
+            if (position >= onlineStartRow && position < onlineEndRow) {
+                return onlineParticipants.get(position - onlineStartRow);
+            } else if (position >= offlineStartRow && position < offlineEndRow) {
+                return offlineParticipants.get(position - offlineStartRow);
+            } else if (position >= recentlyStartRow && position < recentlyEndRow) {
+                return recentlyParticipants.get(position - recentlyStartRow);
+            } else if (position >= lastWeekStartRow && position < lastWeekEndRow) {
+                return lastWeekParticipants.get(position - lastWeekStartRow);
+            } else if (position >= lastMonthStartRow && position < lastMonthEndRow) {
+                return lastMonthParticipants.get(position - lastMonthStartRow);
+            } else if (position >= longTimeAgoStartRow && position < longTimeAgoEndRow) {
+                return longTimeAgoParticipants.get(position - longTimeAgoStartRow);
+            } else if (position >= participantsStartRow && position < participantsEndRow) {
                 return participants.get(position - participantsStartRow);
             } else if (position >= contactsStartRow && position < contactsEndRow) {
                 return contacts.get(position - contactsStartRow);
@@ -3916,6 +4661,36 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
         diffCallback.oldParticipants.clear();
         diffCallback.oldParticipants.addAll(participants);
 
+        diffCallback.oldOnlineStartRow = onlineStartRow;
+        diffCallback.oldOnlineEndRow = onlineEndRow;
+        diffCallback.oldOnline.clear();
+        diffCallback.oldOnline.addAll(onlineParticipants);
+
+        diffCallback.oldOfflineStartRow = offlineStartRow;
+        diffCallback.oldOfflineEndRow = offlineEndRow;
+        diffCallback.oldOffline.clear();
+        diffCallback.oldOffline.addAll(offlineParticipants);
+
+        diffCallback.oldRecentlyStartRow = recentlyStartRow;
+        diffCallback.oldRecentlyEndRow = recentlyEndRow;
+        diffCallback.oldRecently.clear();
+        diffCallback.oldRecently.addAll(recentlyParticipants);
+
+        diffCallback.oldLastWeekStartRow = lastWeekStartRow;
+        diffCallback.oldLastWeekEndRow = lastWeekEndRow;
+        diffCallback.oldLastWeek.clear();
+        diffCallback.oldLastWeek.addAll(lastWeekParticipants);
+
+        diffCallback.oldLastMonthStartRow = lastMonthStartRow;
+        diffCallback.oldLastMonthEndRow = lastMonthEndRow;
+        diffCallback.oldLastMonth.clear();
+        diffCallback.oldLastMonth.addAll(lastMonthParticipants);
+
+        diffCallback.oldLongTimeAgoStartRow = longTimeAgoStartRow;
+        diffCallback.oldLongTimeAgoEndRow = longTimeAgoEndRow;
+        diffCallback.oldLongTimeAgo.clear();
+        diffCallback.oldLongTimeAgo.addAll(longTimeAgoParticipants);
+
         diffCallback.fillPositions(diffCallback.oldPositionToItem);
         return diffCallback;
     }
@@ -3956,10 +4731,22 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
         int oldContactsEndRow;
         int oldBotStartRow;
         int oldBotEndRow;
+        int oldOnlineStartRow, oldOnlineEndRow;
+        int oldOfflineStartRow, oldOfflineEndRow;
+        int oldRecentlyStartRow, oldRecentlyEndRow;
+        int oldLastWeekStartRow, oldLastWeekEndRow;
+        int oldLastMonthStartRow, oldLastMonthEndRow;
+        int oldLongTimeAgoStartRow, oldLongTimeAgoEndRow;
 
         private ArrayList<TLObject> oldParticipants = new ArrayList<>();
         private ArrayList<TLObject> oldBots = new ArrayList<>();
         private ArrayList<TLObject> oldContacts = new ArrayList<>();
+        private ArrayList<TLObject> oldOnline = new ArrayList<>();
+        private ArrayList<TLObject> oldOffline = new ArrayList<>();
+        private ArrayList<TLObject> oldRecently = new ArrayList<>();
+        private ArrayList<TLObject> oldLastWeek = new ArrayList<>();
+        private ArrayList<TLObject> oldLastMonth = new ArrayList<>();
+        private ArrayList<TLObject> oldLongTimeAgo = new ArrayList<>();
 
         @Override
         public int getOldListSize() {
@@ -3979,6 +4766,18 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
                 return oldContacts.get(oldItemPosition - oldContactsStartRow).equals(contacts.get(newItemPosition - contactsStartRow));
             } else if (oldItemPosition >= oldParticipantsStartRow && oldItemPosition < oldParticipantsEndRow && newItemPosition >= participantsStartRow && newItemPosition < participantsEndRow) {
                 return oldParticipants.get(oldItemPosition - oldParticipantsStartRow).equals(participants.get(newItemPosition - participantsStartRow));
+            } else if (oldItemPosition >= oldOnlineStartRow && oldItemPosition < oldOnlineEndRow && newItemPosition >= onlineStartRow && newItemPosition < onlineEndRow) {
+                return oldOnline.get(oldItemPosition - oldOnlineStartRow).equals(onlineParticipants.get(newItemPosition - onlineStartRow));
+            } else if (oldItemPosition >= oldOfflineStartRow && oldItemPosition < oldOfflineEndRow && newItemPosition >= offlineStartRow && newItemPosition < offlineEndRow) {
+                return oldOffline.get(oldItemPosition - oldOfflineStartRow).equals(offlineParticipants.get(newItemPosition - offlineStartRow));
+            } else if (oldItemPosition >= oldRecentlyStartRow && oldItemPosition < oldRecentlyEndRow && newItemPosition >= recentlyStartRow && newItemPosition < recentlyEndRow) {
+                return oldRecently.get(oldItemPosition - oldRecentlyStartRow).equals(recentlyParticipants.get(newItemPosition - recentlyStartRow));
+            } else if (oldItemPosition >= oldLastWeekStartRow && oldItemPosition < oldLastWeekEndRow && newItemPosition >= lastWeekStartRow && newItemPosition < lastWeekEndRow) {
+                return oldLastWeek.get(oldItemPosition - oldLastWeekStartRow).equals(lastWeekParticipants.get(newItemPosition - lastWeekStartRow));
+            } else if (oldItemPosition >= oldLastMonthStartRow && oldItemPosition < oldLastMonthEndRow && newItemPosition >= lastMonthStartRow && newItemPosition < lastMonthEndRow) {
+                return oldLastMonth.get(oldItemPosition - oldLastMonthStartRow).equals(lastMonthParticipants.get(newItemPosition - lastMonthStartRow));
+            } else if (oldItemPosition >= oldLongTimeAgoStartRow && oldItemPosition < oldLongTimeAgoEndRow && newItemPosition >= longTimeAgoStartRow && newItemPosition < longTimeAgoEndRow) {
+                return oldLongTimeAgo.get(oldItemPosition - oldLongTimeAgoStartRow).equals(longTimeAgoParticipants.get(newItemPosition - longTimeAgoStartRow));
             }
             return oldPositionToItem.get(oldItemPosition) == newPositionToItem.get(newItemPosition);
         }
@@ -4028,6 +4827,13 @@ public class ChatUsersActivity extends BaseFragment implements NotificationCente
             put(++pointer, contactsHeaderRow, sparseIntArray);
             put(++pointer, botHeaderRow, sparseIntArray);
             put(++pointer, membersHeaderRow, sparseIntArray);
+            put(++pointer, crawlMembersRow, sparseIntArray);
+            put(++pointer, onlineHeaderRow, sparseIntArray);
+            put(++pointer, offlineHeaderRow, sparseIntArray);
+            put(++pointer, recentlyHeaderRow, sparseIntArray);
+            put(++pointer, lastWeekHeaderRow, sparseIntArray);
+            put(++pointer, lastMonthHeaderRow, sparseIntArray);
+            put(++pointer, longTimeAgoHeaderRow, sparseIntArray);
             put(++pointer, slowmodeRow, sparseIntArray);
             put(++pointer, slowmodeSelectRow, sparseIntArray);
             put(++pointer, slowmodeInfoRow, sparseIntArray);

@@ -43,6 +43,7 @@ import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.NotificationsController;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.ConnectionsManager;
@@ -644,7 +645,11 @@ public class SelfStoryViewsPage extends FrameLayout implements NotificationCente
                         showReactionsSort = serverItem.views.reactions_count >= (BuildVars.DEBUG_VERSION ? 5 : 10);
                         showContactsFilter = serverItem.dialogId >= 0 && serverItem.views.views_count >= 20 && !serverItem.contacts && !serverItem.close_friends && !serverItem.selected_contacts;
                     }
-                    titleView.setText(LocaleController.getString(currentModel.isChannel ? R.string.Reactions : R.string.Viewers));
+                    if (currentModel != null && currentModel.isShowingCached) {
+                        titleView.setText(LocaleController.getString(R.string.Viewers) + " (" + LocaleController.getString(R.string.StoryViewsCached) + ")");
+                    } else {
+                        titleView.setText(LocaleController.getString(currentModel.isChannel ? R.string.Reactions : R.string.Viewers));
+                    }
                 }
                 searchField.setVisibility(showSearch ? View.VISIBLE : View.GONE);
                 TOP_PADDING = showSearch ? 96 : 46;
@@ -1129,7 +1134,7 @@ public class SelfStoryViewsPage extends FrameLayout implements NotificationCente
                         }
                     } else if (model != null && model.showReactionOnly) {
                         items.add(new Item(SUBSCRIBE_TO_PREMIUM_TEXT_HINT));
-                    } else if (model != null && model.getCount() < model.totalCount && TextUtils.isEmpty(model.state.searchQuery) && !model.state.contactsOnly) {
+                    } else if (model != null && !model.isShowingCached && model.getCount() < model.totalCount && TextUtils.isEmpty(model.state.searchQuery) && !model.state.contactsOnly) {
                         items.add(new Item(SERVER_CANT_RETURN_TEXT_HINT));
                     }
                 }
@@ -1184,6 +1189,7 @@ public class SelfStoryViewsPage extends FrameLayout implements NotificationCente
         ArrayList<TL_stories.StoryView> views = new ArrayList<>();
         ArrayList<TL_stories.StoryView> originalViews = new ArrayList<>();
         ArrayList<TL_stories.StoryReaction> reactions = new ArrayList<>();
+        public boolean isShowingCached;
         boolean isExpiredViews;
         boolean showReactionOnly;
         boolean initial;
@@ -1209,10 +1215,14 @@ public class SelfStoryViewsPage extends FrameLayout implements NotificationCente
             if (totalCount < 200) {
                 useLocalFilters = true;
             }
-            isExpiredViews = StoriesUtilities.hasExpiredViews(storyItem) && !UserConfig.getInstance(currentAccount).isPremium();
+            boolean expired = StoriesUtilities.hasExpiredViews(storyItem) && !UserConfig.getInstance(currentAccount).isPremium();
+            isExpiredViews = expired;
             if (isExpiredViews && storyItem.views != null && storyItem.views.reactions_count > 0) {
                 isExpiredViews = false;
                 showReactionOnly = true;
+            }
+            if (expired && !isChannel) {
+                loadCachedViews();
             }
             if (!isExpiredViews) {
                 initial = true;
@@ -1231,8 +1241,45 @@ public class SelfStoryViewsPage extends FrameLayout implements NotificationCente
             }
         }
 
+        public void loadCachedViews() {
+            if (isChannel || storyItem == null) {
+                return;
+            }
+            loading = true;
+            MessagesStorage.getInstance(currentAccount).loadStoryViewsCache(dialogId, storyItem.id, (cachedList) -> {
+                loading = false;
+                if (cachedList != null && cachedList.views != null && !cachedList.views.isEmpty()) {
+                    isExpiredViews = false;
+                    isShowingCached = true;
+                    showReactionOnly = false;
+                    hasNext = false;
+
+                    if (cachedList.users != null) {
+                        MessagesController.getInstance(currentAccount).putUsers(cachedList.users, false);
+                    }
+                    if (cachedList.chats != null) {
+                        MessagesController.getInstance(currentAccount).putChats(cachedList.chats, false);
+                    }
+
+                    views.clear();
+                    originalViews.clear();
+                    if (useLocalFilters) {
+                        originalViews.addAll(cachedList.views);
+                        applyLocalFilter();
+                    } else {
+                        views.addAll(cachedList.views);
+                    }
+                    totalCount = cachedList.count > 0 ? cachedList.count : views.size();
+
+                    for (int i = 0; i < listeners.size(); i++) {
+                        listeners.get(i).onDataRecieved(ViewsModel.this);
+                    }
+                }
+            });
+        }
+
         public void loadNext() {
-            if (loading || !hasNext || isExpiredViews) {
+            if (loading || !hasNext || isExpiredViews || isShowingCached) {
                 return;
             }
             if (isChannel) {
@@ -1349,6 +1396,9 @@ public class SelfStoryViewsPage extends FrameLayout implements NotificationCente
                         MessagesController.getInstance(currentAccount).putUsers(res.users, false);
                         MessagesController.getInstance(currentAccount).putChats(res.chats, false);
                         MessagesStorage.getInstance(currentAccount).putUsersAndChats(res.users, res.chats, true, false);
+                        if (SharedConfig.cacheStoryViewers && !isChannel && storyItem != null) {
+                            MessagesStorage.getInstance(currentAccount).saveStoryViewsCache(dialogId, storyItem.id, res);
+                        }
                         if (initial) {
                             initial = false;
                             for (int i = 0; i < views.size(); i++) {
@@ -1461,6 +1511,9 @@ public class SelfStoryViewsPage extends FrameLayout implements NotificationCente
         public void addListener(SelfStoryViewsPage listener) {
             if (!listeners.contains(listener)) {
                 listeners.add(listener);
+                if (isShowingCached && !views.isEmpty()) {
+                    listener.onDataRecieved(this);
+                }
             }
         }
 
@@ -1634,6 +1687,18 @@ public class SelfStoryViewsPage extends FrameLayout implements NotificationCente
                         gap.setTag(R.id.fit_width_tag, 1);
                         popupLayout.addView(gap, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
                         ActionBarMenuItem.addText(popupLayout, LocaleController.getString(isChannel ? R.string.StoryReactionsSortDescription : R.string.StoryViewsSortDescription), resourcesProvider);
+
+                        ActionBarPopupWindow.GapView gap2 = new ActionBarPopupWindow.GapView(getContext(), resourcesProvider, Theme.key_actionBarDefaultSubmenuSeparator);
+                        gap2.setTag(R.id.fit_width_tag, 1);
+                        popupLayout.addView(gap2, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
+
+                        ActionBarMenuSubItem exportItem = ActionBarMenuItem.addItem(popupLayout, R.drawable.msg_share, LocaleController.getString(R.string.ExportViewers), false, resourcesProvider);
+                        exportItem.setOnClickListener(v1 -> {
+                            exportViewers();
+                            if (popupMenu != null) {
+                                popupMenu.dismiss();
+                            }
+                        });
                     }
 
                     @Override
@@ -1775,5 +1840,51 @@ public class SelfStoryViewsPage extends FrameLayout implements NotificationCente
             clip[0] = AndroidUtilities.dp(TOP_PADDING);
             clip[1] = getMeasuredHeight();
         }
+    }
+
+    private void exportViewers() {
+        if (currentModel == null || currentModel.views == null || currentModel.views.isEmpty()) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        int count = currentModel.views.size();
+        for (int i = 0; i < count; i++) {
+            TL_stories.StoryView view = currentModel.views.get(i);
+            if (view == null) {
+                continue;
+            }
+            long userId = view.user_id != 0 ? view.user_id : (view.peer_id != null ? DialogObject.getPeerDialogId(view.peer_id) : 0);
+            String name;
+            if (userId > 0) {
+                TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(userId);
+                if (user != null) {
+                    name = ContactsController.formatName(user.first_name, user.last_name);
+                    if (!TextUtils.isEmpty(user.username)) {
+                        name += " (@" + user.username + ")";
+                    }
+                } else {
+                    name = "ID: " + userId;
+                }
+            } else if (userId < 0) {
+                TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-userId);
+                name = chat != null ? chat.title : ("ID: " + userId);
+            } else {
+                name = "Unknown";
+            }
+            sb.append(i + 1).append(". ").append(name);
+            if (view.date != 0) {
+                sb.append(" - ").append(LocaleController.formatDateTime(view.date, false));
+            }
+            if (view.reaction != null) {
+                if (view.reaction instanceof TLRPC.TL_reactionEmoji) {
+                    sb.append(" [").append(((TLRPC.TL_reactionEmoji) view.reaction).emoticon).append("]");
+                } else if (view.reaction instanceof TLRPC.TL_reactionCustomEmoji) {
+                    sb.append(" [Reaction]");
+                }
+            }
+            sb.append("\n");
+        }
+        AndroidUtilities.addToClipboard(sb.toString());
+        BulletinFactory.of(SelfStoryViewsPage.this, resourcesProvider).createCopyBulletin(LocaleController.getString(R.string.ViewersCopied)).show();
     }
 }

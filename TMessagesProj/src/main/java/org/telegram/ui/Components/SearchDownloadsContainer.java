@@ -30,6 +30,7 @@ import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.ConnectionsManager;
@@ -143,7 +144,7 @@ public class SearchDownloadsContainer extends FrameLayout implements Notificatio
                         return;
                     }
                     boolean openInPhotoViewer = message.canPreviewDocument();
-                    if (!openInPhotoViewer) {
+                    if (!openInPhotoViewer && !SharedConfig.allowSaveRestrictedMedia) {
                         boolean noforwards = message.messageOwner != null && message.messageOwner.noforwards;
                         TLRPC.Chat chatTo = messageObject.messageOwner.peer_id.channel_id != 0 ? MessagesController.getInstance(UserConfig.selectedAccount).getChat(messageObject.messageOwner.peer_id.channel_id) : null;
                         if (chatTo == null) {

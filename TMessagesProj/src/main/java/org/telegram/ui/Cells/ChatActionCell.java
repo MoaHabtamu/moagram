@@ -679,7 +679,7 @@ public class ChatActionCell extends BaseCell implements DownloadController.FileD
             TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(messageObject.messageOwner.media.user_id);
             avatarDrawable.setInfo(currentAccount, user);
             TL_stories.StoryItem storyItem = messageObject.messageOwner.media.storyItem;
-            if (storyItem != null && storyItem.noforwards) {
+            if (storyItem != null && storyItem.noforwards && !SharedConfig.allowSaveRestrictedMedia) {
                 imageReceiver.setForUserOrChat(user, avatarDrawable, null, true, 0, true);
             } else {
                 StoriesUtilities.setImage(imageReceiver, storyItem);

@@ -2252,7 +2252,7 @@ public class AudioPlayerAlert extends BottomSheet implements NotificationCenter.
             }
             final long dialogId = messageObject.getDialogId();
             final long docId = messageObject.getDocument() != null ? messageObject.getDocument().id : 0L;
-            final boolean noforwards = (
+            final boolean noforwards = !SharedConfig.allowSaveRestrictedMedia && (
                 dialogId < 0 && MessagesController.getInstance(currentAccount).isPeerNoForwards(dialogId) ||
                 MessagesController.getInstance(currentAccount).isPeerNoForwards(messageObject.getDialogId()) ||
                 messageObject.messageOwner.noforwards

@@ -264,6 +264,114 @@ public class SharedConfig {
     public static boolean photoViewerBlur = true;
     public static boolean payByInvoice;
     public static int stealthModeSendMessageConfirm = 2;
+
+    public static boolean ghostModeEnabled;
+    public static boolean ghostModeHideOnline = true;
+    public static boolean ghostModeHideTyping = true;
+    public static boolean ghostModeGhostRead = true;
+    public static boolean ghostModeMarkOnReply = true;
+    public static boolean ghostModeHideStories = true;
+    public static boolean ghostModeStealthSend = true;
+
+    public static boolean allowSaveRestrictedMedia = true;
+    public static boolean ignoreAllRestrictions = true;
+    public static boolean saveDeletedMessages = true;
+    public static boolean saveDeletedMedia = true;
+    public static boolean saveEditHistory = true;
+    public static boolean searchHideJoined = false;
+    public static boolean searchShowJoinedPrivateChats = true;
+    public static boolean keepSelfDestructingMedia = false;
+    public static boolean cacheStoryViewers = true;
+
+    public static void toggleSearchHideJoined() {
+        setSearchHideJoined(!searchHideJoined);
+    }
+
+    public static void setSearchHideJoined(boolean hide) {
+        searchHideJoined = hide;
+        searchShowJoinedPrivateChats = !hide;
+        ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", Activity.MODE_PRIVATE)
+                .edit()
+                .putBoolean("searchHideJoined", searchHideJoined)
+                .putBoolean("searchShowJoinedPrivateChats", searchShowJoinedPrivateChats)
+                .apply();
+    }
+
+    public static void toggleSearchShowJoinedPrivateChats() {
+        toggleSearchHideJoined();
+    }
+
+    public static void setSearchShowJoinedPrivateChats(boolean show) {
+        setSearchHideJoined(!show);
+    }
+
+    public static void setIgnoreAllRestrictions(boolean enabled) {
+        ignoreAllRestrictions = enabled;
+        saveConfig();
+    }
+
+    public static void setSaveDeletedMessages(boolean enabled) {
+        saveDeletedMessages = enabled;
+        saveConfig();
+    }
+
+    public static void setSaveDeletedMedia(boolean enabled) {
+        saveDeletedMedia = enabled;
+        saveConfig();
+    }
+
+    public static void setSaveEditHistory(boolean enabled) {
+        saveEditHistory = enabled;
+        saveConfig();
+    }
+
+    public static void setKeepSelfDestructingMedia(boolean enabled) {
+        keepSelfDestructingMedia = enabled;
+        saveConfig();
+    }
+
+    public static void setAllowSaveRestrictedMedia(boolean enabled) {
+        allowSaveRestrictedMedia = enabled;
+        saveConfig();
+    }
+
+    public static void setCacheStoryViewers(boolean enabled) {
+        cacheStoryViewers = enabled;
+        saveConfig();
+    }
+
+    public static boolean isGhostModeOnlineHidden() {
+        return ghostModeEnabled && ghostModeHideOnline;
+    }
+
+    public static boolean isGhostModeTypingHidden() {
+        return ghostModeEnabled && ghostModeHideTyping;
+    }
+
+    public static boolean isGhostModeGhostRead() {
+        return ghostModeEnabled && ghostModeGhostRead;
+    }
+
+    public static boolean isGhostModeHideStories() {
+        return ghostModeEnabled && ghostModeHideStories;
+    }
+
+    public static boolean isGhostModeStealthSend() {
+        return ghostModeEnabled && ghostModeStealthSend;
+    }
+
+    public static void setGhostModeEnabled(boolean enabled) {
+        ghostModeEnabled = enabled;
+        saveConfig();
+        if (enabled) {
+            for (int i = 0; i < UserConfig.MAX_ACCOUNT_COUNT; i++) {
+                if (UserConfig.getInstance(i).isClientActivated()) {
+                    MessagesController.getInstance(i).sendOfflineStatus();
+                }
+            }
+        }
+    }
+
     private static int lastLocalId = -210000;
 
     public static String storageCacheDir;
@@ -486,6 +594,20 @@ public class SharedConfig {
                 editor.putBoolean("hasEmailLogin", hasEmailLogin);
                 editor.putBoolean("floatingDebugActive", isFloatingDebugActive);
                 editor.putBoolean("record_via_sco", recordViaSco);
+                editor.putBoolean("ghostModeEnabled", ghostModeEnabled);
+                editor.putBoolean("ghostModeHideOnline", ghostModeHideOnline);
+                editor.putBoolean("ghostModeHideTyping", ghostModeHideTyping);
+                editor.putBoolean("ghostModeGhostRead", ghostModeGhostRead);
+                editor.putBoolean("ghostModeMarkOnReply", ghostModeMarkOnReply);
+                editor.putBoolean("ghostModeHideStories", ghostModeHideStories);
+                editor.putBoolean("ghostModeStealthSend", ghostModeStealthSend);
+                editor.putBoolean("allowSaveRestrictedMedia", allowSaveRestrictedMedia);
+                editor.putBoolean("ignoreAllRestrictions", ignoreAllRestrictions);
+                editor.putBoolean("saveDeletedMessages", saveDeletedMessages);
+                editor.putBoolean("saveDeletedMedia", saveDeletedMedia);
+                editor.putBoolean("saveEditHistory", saveEditHistory);
+                editor.putBoolean("keepSelfDestructingMedia", keepSelfDestructingMedia);
+                editor.putBoolean("cacheStoryViewers", cacheStoryViewers);
                 editor.apply();
             } catch (Exception e) {
                 FileLog.e(e);
@@ -574,7 +696,7 @@ public class SharedConfig {
                     if (updateVersionString == null) {
                         updateVersionString = BuildVars.BUILD_VERSION_STRING;
                     }
-                    if (pendingAppUpdateBuildVersion != updateVersion || pendingAppUpdate.version == null || updateVersionString.compareTo(pendingAppUpdate.version) >= 0 || BuildVars.DEBUG_PRIVATE_VERSION) {
+                    if (!BuildVars.CHECK_UPDATES || pendingAppUpdateBuildVersion != updateVersion || pendingAppUpdate.version == null || updateVersionString.compareTo(pendingAppUpdate.version) >= 0 || BuildVars.DEBUG_PRIVATE_VERSION) {
                         pendingAppUpdate = null;
                         AndroidUtilities.runOnUIThread(SharedConfig::saveConfig);
                     }
@@ -668,6 +790,8 @@ public class SharedConfig {
             useSurfaceInStories = preferences.getBoolean("useSurfaceInStories", Build.VERSION.SDK_INT >= 30);
             payByInvoice = preferences.getBoolean("payByInvoice", false);
             photoViewerBlur = preferences.getBoolean("photoViewerBlur", true);
+            searchHideJoined = preferences.getBoolean("searchHideJoined", !preferences.getBoolean("searchShowJoinedPrivateChats", true));
+            searchShowJoinedPrivateChats = !searchHideJoined;
             multipleReactionsPromoShowed = preferences.getBoolean("multipleReactionsPromoShowed", false);
             callEncryptionHintDisplayedCount = preferences.getInt("callEncryptionHintDisplayedCount", 0);
             debugVideoQualities = preferences.getBoolean("debugVideoQualities", false);
@@ -675,6 +799,20 @@ public class SharedConfig {
             debugViewMetrics = preferences.getBoolean("debugViewMetrics", false);
             photoHighQualityDefault = preferences.getBoolean("photoHighQualityDefault", false);
             photoLiveDefault = preferences.getBoolean("photoLiveDefault", false);
+            ghostModeEnabled = preferences.getBoolean("ghostModeEnabled", false);
+            ghostModeHideOnline = preferences.getBoolean("ghostModeHideOnline", true);
+            ghostModeHideTyping = preferences.getBoolean("ghostModeHideTyping", true);
+            ghostModeGhostRead = preferences.getBoolean("ghostModeGhostRead", true);
+            ghostModeMarkOnReply = preferences.getBoolean("ghostModeMarkOnReply", true);
+            ghostModeHideStories = preferences.getBoolean("ghostModeHideStories", true);
+            ghostModeStealthSend = preferences.getBoolean("ghostModeStealthSend", true);
+            allowSaveRestrictedMedia = preferences.getBoolean("allowSaveRestrictedMedia", true);
+            ignoreAllRestrictions = preferences.getBoolean("ignoreAllRestrictions", true);
+            saveDeletedMessages = preferences.getBoolean("saveDeletedMessages", true);
+            saveDeletedMedia = preferences.getBoolean("saveDeletedMedia", true);
+            saveEditHistory = preferences.getBoolean("saveEditHistory", true);
+            cacheStoryViewers = preferences.getBoolean("cacheStoryViewers", true);
+            keepSelfDestructingMedia = preferences.getBoolean("keepSelfDestructingMedia", false);
 
             loadDebugConfig(preferences);
 
@@ -768,7 +906,7 @@ public class SharedConfig {
     }
 
     public static boolean isAppUpdateAvailable() {
-        if (pendingAppUpdate == null || pendingAppUpdate.document == null || !ApplicationLoader.isStandaloneBuild()) {
+        if (!BuildVars.CHECK_UPDATES || pendingAppUpdate == null || pendingAppUpdate.document == null || !ApplicationLoader.isStandaloneBuild()) {
             return false;
         }
         int currentVersion;
@@ -783,6 +921,9 @@ public class SharedConfig {
     }
 
     public static boolean setNewAppVersionAvailable(TLRPC.TL_help_appUpdate update) {
+        if (!BuildVars.CHECK_UPDATES) {
+            return false;
+        }
         String updateVersionString = null;
         int versionCode = 0;
         try {

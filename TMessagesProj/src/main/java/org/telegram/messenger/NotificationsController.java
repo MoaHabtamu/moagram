@@ -1365,6 +1365,12 @@ public class NotificationsController extends BaseController implements Notificat
     }
 
     private void appendMessage(MessageObject messageObject) {
+        if (messageObject != null) {
+            HiddenChatsController hiddenController = HiddenChatsController.getInstance(currentAccount);
+            if (hiddenController.isChatHidden(messageObject.getDialogId()) && hiddenController.isHideNotifications()) {
+                return;
+            }
+        }
         for (int i = 0; i < pushMessages.size(); i++) {
             if (
                 pushMessages.get(i).getId() == messageObject.getId() &&
@@ -1412,6 +1418,11 @@ public class NotificationsController extends BaseController implements Notificat
                     }
                 } else {
                     canAddValue = true;
+                }
+
+                if (HiddenChatsController.getInstance(currentAccount).isChatHidden(dialogId)) {
+                    canAddValue = false;
+                    newCount = 0;
                 }
 
                 if (notifyCheck && !canAddValue) {
@@ -1599,7 +1610,7 @@ public class NotificationsController extends BaseController implements Notificat
 
                     settingsCache.put(dialog_id, value);
                 }
-                if (!value) {
+                if (!value || HiddenChatsController.getInstance(currentAccount).isChatHidden(dialog_id)) {
                     continue;
                 }
                 int count = dialogs.valueAt(a);
@@ -1742,7 +1753,10 @@ public class NotificationsController extends BaseController implements Notificat
                         final ArrayList<TLRPC.Dialog> dialogs = new ArrayList<>(MessagesController.getInstance(a).allDialogs);
                         for (int i = 0, N = dialogs.size(); i < N; i++) {
                             TLRPC.Dialog dialog = dialogs.get(i);
-                            if (dialog != null && DialogObject.isChatDialog(dialog.id)) {
+                            if (dialog == null || HiddenChatsController.getInstance(a).isChatHidden(dialog.id)) {
+                                continue;
+                            }
+                            if (DialogObject.isChatDialog(dialog.id)) {
                                 TLRPC.Chat chat = getMessagesController().getChat(-dialog.id);
                                 if (ChatObject.isNotInChat(chat) || ChatObject.isCommunity(chat)) {
                                     continue;
@@ -1763,6 +1777,9 @@ public class NotificationsController extends BaseController implements Notificat
                     try {
                         for (int i = 0, N = MessagesController.getInstance(a).allDialogs.size(); i < N; i++) {
                             TLRPC.Dialog dialog = MessagesController.getInstance(a).allDialogs.get(i);
+                            if (dialog == null || HiddenChatsController.getInstance(a).isChatHidden(dialog.id)) {
+                                continue;
+                            }
                             if (DialogObject.isChatDialog(dialog.id)) {
                                 TLRPC.Chat chat = getMessagesController().getChat(-dialog.id);
                                 if (ChatObject.isNotInChat(chat) || ChatObject.isCommunity(chat)) {
@@ -1800,6 +1817,15 @@ public class NotificationsController extends BaseController implements Notificat
 
     public String getShortStringForMessage(MessageObject messageObject, String[] userName, boolean[] preview) {
         if (AndroidUtilities.needShowPasscode() || SharedConfig.isWaitingForPasscodeEnter) {
+            return LocaleController.getString(R.string.NotificationHiddenMessage);
+        }
+        if (messageObject != null && HiddenChatsController.getInstance(currentAccount).isChatHidden(messageObject.getDialogId())) {
+            if (userName != null && userName.length > 0) {
+                userName[0] = LocaleController.getString(R.string.AppName);
+            }
+            if (preview != null && preview.length > 0) {
+                preview[0] = false;
+            }
             return LocaleController.getString(R.string.NotificationHiddenMessage);
         }
         long dialogId = messageObject.messageOwner.dialog_id;
@@ -2486,6 +2512,12 @@ public class NotificationsController extends BaseController implements Notificat
 
     private String getStringForMessage(MessageObject messageObject, boolean shortMessage, boolean[] text, boolean[] preview) {
         if (AndroidUtilities.needShowPasscode() || SharedConfig.isWaitingForPasscodeEnter) {
+            return LocaleController.getString(R.string.YouHaveNewMessage);
+        }
+        if (messageObject != null && HiddenChatsController.getInstance(currentAccount).isChatHidden(messageObject.getDialogId())) {
+            if (preview != null && preview.length > 0) {
+                preview[0] = false;
+            }
             return LocaleController.getString(R.string.YouHaveNewMessage);
         }
         if (messageObject.isStoryPush || messageObject.isStoryMentionPush) {
@@ -4259,6 +4291,11 @@ public class NotificationsController extends BaseController implements Notificat
             } else {
                 name = chatName;
             }
+            boolean isChatHidden = HiddenChatsController.getInstance(currentAccount).isChatHidden(dialog_id);
+            if (isChatHidden) {
+                name = LocaleController.getString(R.string.AppName);
+                replace = false;
+            }
             if (lastMessageObject != null && (lastMessageObject.isReactionPush || lastMessageObject.isStoryReactionPush) && !preferences.getBoolean("EnableReactionsPreview", true)) {
                 name = LocaleController.getString(R.string.NotificationHiddenName);
             }
@@ -4550,14 +4587,14 @@ public class NotificationsController extends BaseController implements Notificat
                 }
                 intent.putExtra("storyDialogIds", peerIds);
             } else if (!DialogObject.isEncryptedDialog(dialog_id)) {
-                if (pushDialogs.size() == 1) {
+                if (pushDialogs.size() == 1 && !isChatHidden) {
                     if (chatId != 0) {
                         intent.putExtra("chatId", chatId);
                     } else if (userId != 0) {
                         intent.putExtra("userId", userId);
                     }
                 }
-                if (AndroidUtilities.needShowPasscode() || SharedConfig.isWaitingForPasscodeEnter) {
+                if (AndroidUtilities.needShowPasscode() || SharedConfig.isWaitingForPasscodeEnter || isChatHidden) {
                     photoPath = null;
                 } else {
                     if (pushDialogs.size() == 1 && Build.VERSION.SDK_INT < 28) {
@@ -5093,12 +5130,8 @@ public class NotificationsController extends BaseController implements Notificat
                 photoPath = null;
             }
 
-            if (waitingForPasscode) {
-                if (DialogObject.isChatDialog(dialogId)) {
-                    name = LocaleController.getString(R.string.NotificationHiddenChatName);
-                } else {
-                    name = LocaleController.getString(R.string.NotificationHiddenName);
-                }
+            if (waitingForPasscode || HiddenChatsController.getInstance(currentAccount).isChatHidden(dialogId)) {
+                name = LocaleController.getString(R.string.AppName);
                 photoPath = null;
                 canReply = false;
             }
@@ -5523,9 +5556,13 @@ public class NotificationsController extends BaseController implements Notificat
             } else if (DialogObject.isEncryptedDialog(dialogId)) {
                 intent.putExtra("encId", DialogObject.getEncryptedChatId(dialogId));
             } else if (DialogObject.isUserDialog(dialogId)) {
-                intent.putExtra("userId", dialogId);
+                if (!HiddenChatsController.getInstance(currentAccount).isChatHidden(dialogId)) {
+                    intent.putExtra("userId", dialogId);
+                }
             } else {
-                intent.putExtra("chatId", -dialogId);
+                if (!HiddenChatsController.getInstance(currentAccount).isChatHidden(dialogId)) {
+                    intent.putExtra("chatId", -dialogId);
+                }
             }
             FileLog.d("show extra notifications chatId " + dialogId + " topicId " + topicId);
             if (topicId != 0) {
@@ -5643,9 +5680,11 @@ public class NotificationsController extends BaseController implements Notificat
                 NotificationCompat.Action copyAction = new NotificationCompat.Action.Builder(R.drawable.msg_copy, copybutton.text, copyPendingIntent)
                         .setShowsUserInterface(false)
                         .build();
-                builder.addAction(copyAction);
+                if (!HiddenChatsController.getInstance(currentAccount).isChatHidden(dialogId)) {
+                    builder.addAction(copyAction);
+                }
             }
-            if (dialogKey.dialogId != UserObject.VERIFY && dialogKey.dialogId != UserObject.OAUTH) {
+            if (dialogKey.dialogId != UserObject.VERIFY && dialogKey.dialogId != UserObject.OAUTH && !HiddenChatsController.getInstance(currentAccount).isChatHidden(dialogId)) {
                 if (wearReplyAction != null) {
                     builder.addAction(wearReplyAction);
                 }

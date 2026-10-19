@@ -1248,6 +1248,7 @@ public class ChatActivity extends BaseFragment implements
 
     public final static int OPTION_VIEW_STATISTICS = 115;
     public final static int OPTION_WELCOME_REVERT = 116;
+    public final static int OPTION_EDIT_HISTORY = 117;
 
     private final static int[] allowedNotificationsDuringChatListAnimations = new int[]{
             NotificationCenter.messagesRead,
@@ -1687,6 +1688,7 @@ public class ChatActivity extends BaseFragment implements
     private final static int charge_fee = 72;
 
     private final static int chat_menu_topic_create = 73;
+    private final static int manage_repeats = 75;
 
     private final static int id_chat_compose_panel = 1000;
 
@@ -3492,7 +3494,7 @@ public class ChatActivity extends BaseFragment implements
             if (chatActivity != null && chatActivity.getDialogId() == UserObject.VERIFY) {
                 return false;
             }
-            final boolean noforwards = (
+            final boolean noforwards = !SharedConfig.allowSaveRestrictedMedia && (
                 chatActivity != null && chatActivity.isPeerNoForwards() ||
                 selectedView != null && selectedView.getMessageObject() != null && selectedView.getMessageObject().messageOwner != null && selectedView.getMessageObject().messageOwner.noforwards
             );
@@ -3512,7 +3514,7 @@ public class ChatActivity extends BaseFragment implements
 
         @Override
         protected boolean canCopy() {
-            if (chatActivity != null && chatActivity.getDialogId() == UserObject.VERIFY) {
+            if (SharedConfig.allowSaveRestrictedMedia || (chatActivity != null && chatActivity.getDialogId() == UserObject.VERIFY)) {
                 return true;
             }
             return chatActivity == null || !(
@@ -3962,6 +3964,8 @@ public class ChatActivity extends BaseFragment implements
                         openAttachMenu();
                     });
                     headerItem.toggleSubMenu(attach, attachItem.createView());
+                } else if (id == manage_repeats) {
+                    AlertsCreator.showLocalRepeats(context, currentAccount, dialog_id, themeDelegate);
                 } else if (id == bot_help) {
                     getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of("/help", dialog_id, null, null, null, false, null, null, null, true, 0, 0, null, false));
                 } else if (id == bot_settings) {
@@ -4238,6 +4242,10 @@ public class ChatActivity extends BaseFragment implements
 
         ActionBarMenu menu = actionBar.createMenu();
 
+        if (chatMode == MODE_SCHEDULED) {
+            menu.addItem(manage_repeats, R.drawable.msg_retry).setContentDescription(getString(R.string.LocalRepeatManage));
+        }
+
         if (chatMode == MODE_QUICK_REPLIES && !QuickRepliesController.isSpecial(quickReplyShortcut)) {
             menu.addItem(edit_quick_reply, R.drawable.group_edit).setContentDescription(LocaleController.getString(R.string.Edit));
         }
@@ -4303,6 +4311,9 @@ public class ChatActivity extends BaseFragment implements
                 userFull = getMessagesController().getUserFull(currentUser.id);
             }
             headerItem = menu.addItem(chat_menu_options, otherIcon);
+            if (currentEncryptedChat == null) {
+                headerItem.lazilyAddSubItem(manage_repeats, R.drawable.msg_retry, getString(R.string.LocalRepeatManage));
+            }
             headerItem.setSubMenuDelegate(new ActionBarMenuItem.ActionBarSubMenuItemDelegate() {
                 @Override
                 public void onShowSubMenu() {
@@ -7330,7 +7341,7 @@ public class ChatActivity extends BaseFragment implements
                 String query = MessageObject.findAnimatedEmojiEmoticon(document);
                 AlertsCreator.ensurePaidMessageConfirmation(currentAccount, getDialogId(), 1, price -> {
                     if (chatMode == MODE_SCHEDULED) {
-                        AlertsCreator.createScheduleDatePickerDialog(getParentActivity(), dialog_id, (notify, scheduleDate, scheduleRepeatPeriod) -> SendMessagesHelper.getInstance(currentAccount).sendSticker(document, query, dialog_id, replyingMessageObject, getThreadMessage(), null, replyingQuote, null, notify, scheduleDate, 0, false, parent, getMessageChatSendParams(), 0, getSendMonoForumPeerId(), getSendMessageSuggestionParams()), themeDelegate);
+                        AlertsCreator.createScheduleDatePickerDialog(getParentActivity(), dialog_id, (notify, scheduleDate, scheduleRepeatPeriod) -> SendMessagesHelper.getInstance(currentAccount).sendSticker(document, query, dialog_id, replyingMessageObject, getThreadMessage(), null, replyingQuote, null, notify, scheduleDate, scheduleRepeatPeriod, false, parent, getMessageChatSendParams(), 0, getSendMonoForumPeerId(), getSendMessageSuggestionParams()), themeDelegate);
                     } else {
                         getSendMessagesHelper().sendSticker(document, query, dialog_id, replyingMessageObject, getThreadMessage(), null, replyingQuote, sendAnimationData, true, 0, 0, false, parent, getMessageChatSendParams(), price, getSendMonoForumPeerId(), getSendMessageSuggestionParams());
                     }
@@ -7382,7 +7393,7 @@ public class ChatActivity extends BaseFragment implements
                 if (mentionContainer.getAdapter().isBotCommands()) {
                     if (chatMode == MODE_SCHEDULED) {
                         AlertsCreator.createScheduleDatePickerDialog(getParentActivity(), dialog_id, (notify, scheduleDate, scheduleRepeatPeriod) -> {
-                            getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of((String) object, dialog_id, replyingMessageObject, getThreadMessage(), null, false, null, null, null, notify, scheduleDate, 0, null, false));
+                            getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of((String) object, dialog_id, replyingMessageObject, getThreadMessage(), null, false, null, null, null, notify, scheduleDate, scheduleRepeatPeriod, null, false));
                             chatActivityEnterView.setFieldText("");
                             hideFieldPanel(false);
                         }, themeDelegate);
@@ -8672,8 +8683,10 @@ public class ChatActivity extends BaseFragment implements
         chatScrollHelper.setAnimationCallback(chatScrollHelperCallback);
 
         flagSecure = new FlagSecureReason(getParentActivity().getWindow(), () ->
-            currentEncryptedChat != null ||
-            isPeerNoForwards()
+            !SharedConfig.allowSaveRestrictedMedia && (
+                currentEncryptedChat != null ||
+                isPeerNoForwards()
+            )
         );
 
         if (oldMessage != null) {
@@ -10332,7 +10345,7 @@ public class ChatActivity extends BaseFragment implements
             actionModeViews.add(actionMode.addItemWithWidth(delete, R.drawable.msg_delete, dp(48), LocaleController.getString(R.string.Delete)));
         }
         actionMode.setItemVisibility(edit, canEditMessagesCount == 1 && selectedMessagesIds[0].size() + selectedMessagesIds[1].size() == 1 ? View.VISIBLE : View.GONE);
-        actionMode.setItemVisibility(copy, !isPeerNoForwards() && selectedMessagesCanCopyIds[0].size() + selectedMessagesCanCopyIds[1].size() != 0 ? View.VISIBLE : View.GONE);
+        actionMode.setItemVisibility(copy, (!isPeerNoForwards() || SharedConfig.allowSaveRestrictedMedia) && selectedMessagesCanCopyIds[0].size() + selectedMessagesCanCopyIds[1].size() != 0 ? View.VISIBLE : View.GONE);
         actionMode.setItemVisibility(star, selectedMessagesCanStarIds[0].size() + selectedMessagesCanStarIds[1].size() != 0 ? View.VISIBLE : View.GONE);
         actionMode.setItemVisibility(delete, cantDeleteMessagesCount == 0 ? View.VISIBLE : View.GONE);
         actionMode.setItemVisibility(tag_message, getUserConfig().isPremium() ? View.VISIBLE : View.GONE);
@@ -12166,6 +12179,9 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private boolean hasSelectedNoforwardsMessage() {
+        if (SharedConfig.allowSaveRestrictedMedia) {
+            return false;
+        }
         try {
             for (int i = 0; i < selectedMessagesIds.length; ++i) {
                 for (int j = 0; j < selectedMessagesIds[i].size(); ++j) {
@@ -12226,7 +12242,7 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void openForward(boolean fromActionBar) {
-        if (isPeerNoForwards() || hasSelectedNoforwardsMessage()) {
+        if (!SharedConfig.allowSaveRestrictedMedia && !SharedConfig.keepSelfDestructingMedia && (isPeerNoForwards() || hasSelectedNoforwardsMessage())) {
             // We should update text if user changed locale without re-opening chat activity
             String str;
             if (isPeerNoForwards()) {
@@ -13324,7 +13340,7 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void showTextSelectionHint(MessageObject messageObject) {
-        if (getParentActivity() == null || getMessagesController().isPeerNoForwards(messageObject.getDialogId()) || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards)) {
+        if (getParentActivity() == null || (!SharedConfig.allowSaveRestrictedMedia && (getMessagesController().isPeerNoForwards(messageObject.getDialogId()) || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards)))) {
             return;
         }
         CharSequence text;
@@ -15549,7 +15565,7 @@ public class ChatActivity extends BaseFragment implements
             return null;
         }
         if (readNow) {
-            final boolean delete = messageObject.messageOwner.ttl != 0x7FFFFFFF;
+            final boolean delete = !SharedConfig.keepSelfDestructingMedia && messageObject.messageOwner.ttl != 0x7FFFFFFF;
             final int ttl = messageObject.messageOwner.ttl == 0x7FFFFFFF ? 0 : messageObject.messageOwner.ttl;
             messageObject.messageOwner.destroyTime = ttl + getConnectionsManager().getCurrentTime();
             if (currentEncryptedChat != null) {
@@ -15560,7 +15576,7 @@ public class ChatActivity extends BaseFragment implements
             return null;
         } else {
             return () -> {
-                final boolean delete = messageObject.messageOwner.ttl != 0x7FFFFFFF;
+                final boolean delete = !SharedConfig.keepSelfDestructingMedia && messageObject.messageOwner.ttl != 0x7FFFFFFF;
                 final int ttl = messageObject.messageOwner.ttl == 0x7FFFFFFF ? 0 : messageObject.messageOwner.ttl;
                 messageObject.messageOwner.destroyTime = ttl + getConnectionsManager().getCurrentTime();
                 messageObject.messageOwner.destroyTimeMillis = ttl * 1000L + getConnectionsManager().getCurrentTimeMillis();
@@ -15574,6 +15590,9 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private Runnable sendSecretMediaDelete(MessageObject messageObject) {
+        if (SharedConfig.keepSelfDestructingMedia) {
+            return null;
+        }
         if (messageObject == null || messageObject.isOut() || !messageObject.isSecretMedia() || messageObject.messageOwner.ttl != 0x7FFFFFFF) {
             return null;
         }
@@ -19090,7 +19109,7 @@ public class ChatActivity extends BaseFragment implements
             if (selectedMessagesIds[index].indexOfKey(messageObject.getId()) >= 0) {
                 selectedMessagesIds[index].remove(messageObject.getId());
                 if (!isReport()) {
-                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null) && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards)) {
+                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null) && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards && !SharedConfig.allowSaveRestrictedMedia)) {
                         selectedMessagesCanCopyIds[index].remove(messageObject.getId());
                     }
                     if (!messageObject.isAnimatedEmoji() && (messageObject.isSticker() || messageObject.isAnimatedSticker()) && MessageObject.isStickerHasSet(messageObject.getDocument())) {
@@ -19102,8 +19121,8 @@ public class ChatActivity extends BaseFragment implements
                     if (!messageObject.canDeleteMessage(chatMode == MODE_SCHEDULED, currentChat)) {
                         cantDeleteMessagesCount--;
                     }
-                    boolean noforwards = isPeerNoForwards();
-                    if (chatMode == MODE_SCHEDULED || !messageObject.canForwardMessage() || noforwards) {
+                    boolean noforwards = !SharedConfig.allowSaveRestrictedMedia && !SharedConfig.keepSelfDestructingMedia && isPeerNoForwards();
+                    if (chatMode == MODE_SCHEDULED || (!messageObject.canForwardMessage() && !SharedConfig.allowSaveRestrictedMedia && !SharedConfig.keepSelfDestructingMedia) || noforwards) {
                         cantForwardMessagesCount--;
                     } else {
                         canForwardMessagesCount--;
@@ -19127,7 +19146,7 @@ public class ChatActivity extends BaseFragment implements
                 }
                 selectedMessagesIds[index].put(messageObject.getId(), messageObject);
                 if (!isReport()) {
-                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null) && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards)) {
+                    if ((messageObject.type == MessageObject.TYPE_TEXT || messageObject.isAnimatedEmoji() || messageObject.caption != null) && !(messageObject.messageOwner != null && messageObject.messageOwner.noforwards && !SharedConfig.allowSaveRestrictedMedia)) {
                         selectedMessagesCanCopyIds[index].put(messageObject.getId(), messageObject);
                     }
                     if (!messageObject.isAnimatedEmoji() && (messageObject.isSticker() || messageObject.isAnimatedSticker()) && MessageObject.isStickerHasSet(messageObject.getDocument())) {
@@ -19139,15 +19158,15 @@ public class ChatActivity extends BaseFragment implements
                     if (!messageObject.canDeleteMessage(chatMode == MODE_SCHEDULED, currentChat)) {
                         cantDeleteMessagesCount++;
                     }
-                    boolean noforwards = isPeerNoForwards();
-                    if (chatMode == MODE_SCHEDULED || !messageObject.canForwardMessage() || noforwards) {
+                    boolean noforwards = !SharedConfig.allowSaveRestrictedMedia && !SharedConfig.keepSelfDestructingMedia && isPeerNoForwards();
+                    if (chatMode == MODE_SCHEDULED || (!messageObject.canForwardMessage() && !SharedConfig.allowSaveRestrictedMedia && !SharedConfig.keepSelfDestructingMedia) || noforwards) {
                         cantForwardMessagesCount++;
                     } else {
                         canForwardMessagesCount++;
                     }
                     if (messageObject.isMusic() && !noforwards) {
                         canSaveMusicCount++;
-                    } else if (messageObject.isDocument() && !messageObject.isRoundOnce() && !messageObject.isVoiceOnce() && !noforwards) {
+                    } else if (messageObject.isDocument() && (!messageObject.isRoundOnce() || SharedConfig.allowSaveRestrictedMedia) && (!messageObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia) && !noforwards) {
                         canSaveDocumentsCount++;
                     } else {
                         cantSaveMessagesCount++;
@@ -19174,13 +19193,14 @@ public class ChatActivity extends BaseFragment implements
                 ActionBarMenuItem tagItem = actionBar.createActionMode().getItem(tag_message);
                 ActionBarMenuItem shareItem = actionBar.createActionMode().getItem(share);
 
-                boolean noforwards = isPeerNoForwards() || hasSelectedNoforwardsMessage();
+                boolean noforwards = !SharedConfig.allowSaveRestrictedMedia && !SharedConfig.keepSelfDestructingMedia && (isPeerNoForwards() || hasSelectedNoforwardsMessage());
+                boolean canFwd = cantForwardMessagesCount == 0 || SharedConfig.allowSaveRestrictedMedia || SharedConfig.keepSelfDestructingMedia;
                 if (prevCantForwardCount == 0 && cantForwardMessagesCount != 0 || prevCantForwardCount != 0 && cantForwardMessagesCount == 0) {
                     forwardButtonAnimation = new AnimatorSet();
                     ArrayList<Animator> animators = new ArrayList<>();
                     if (forwardItem != null) {
-                        forwardItem.setEnabled(cantForwardMessagesCount == 0 || noforwards);
-                        animators.add(ObjectAnimator.ofFloat(forwardItem, View.ALPHA, cantForwardMessagesCount == 0 ? 1.0f : 0.5f));
+                        forwardItem.setEnabled(canFwd || noforwards);
+                        animators.add(ObjectAnimator.ofFloat(forwardItem, View.ALPHA, canFwd ? 1.0f : 0.5f));
 
                         if (noforwards && forwardItem.getBackground() != null) {
                             forwardItem.setBackground(null);
@@ -19189,7 +19209,7 @@ public class ChatActivity extends BaseFragment implements
                         }
                     }
                     if (actionsButtonsLayout != null) {
-                        actionsButtonsLayout.setForwardButtonEnabled(cantForwardMessagesCount == 0 || noforwards, true);
+                        actionsButtonsLayout.setForwardButtonEnabled(canFwd || noforwards, true);
                     }
                     forwardButtonAnimation.playTogether(animators);
                     forwardButtonAnimation.setDuration(100);
@@ -19202,15 +19222,15 @@ public class ChatActivity extends BaseFragment implements
                     forwardButtonAnimation.start();
                 } else {
                     if (forwardItem != null) {
-                        forwardItem.setEnabled(cantForwardMessagesCount == 0 || noforwards);
-                        forwardItem.setAlpha(cantForwardMessagesCount == 0 ? 1.0f : 0.5f);
+                        forwardItem.setEnabled(canFwd || noforwards);
+                        forwardItem.setAlpha(canFwd ? 1.0f : 0.5f);
                         if (noforwards) {
                         } else if (forwardItem.getBackground() == null) {
                             forwardItem.setBackground(Theme.createSelectorDrawable(getThemedColor(Theme.key_actionBarActionModeDefaultSelector), 3));
                         }
                     }
                     if (actionsButtonsLayout != null) {
-                        actionsButtonsLayout.setForwardButtonEnabled(cantForwardMessagesCount == 0 || noforwards, false);
+                        actionsButtonsLayout.setForwardButtonEnabled(canFwd || noforwards, false);
                     }
                 }
                 if (saveItem != null) {
@@ -19221,7 +19241,7 @@ public class ChatActivity extends BaseFragment implements
                 int copyVisible = View.GONE, starVisible = View.GONE, newCopyVisible = View.GONE, newStarVisible = View.GONE;
                 if (copyItem != null) {
                     copyVisible = copyItem.getVisibility();
-                    copyItem.setVisibility(!noforwards && selectedMessagesCanCopyIds[0].size() + selectedMessagesCanCopyIds[1].size() != 0 ? View.VISIBLE : View.GONE);
+                    copyItem.setVisibility((!noforwards || SharedConfig.allowSaveRestrictedMedia) && selectedMessagesCanCopyIds[0].size() + selectedMessagesCanCopyIds[1].size() != 0 ? View.VISIBLE : View.GONE);
                     newCopyVisible = copyItem.getVisibility();
                 }
                 if (starItem != null) {
@@ -19311,8 +19331,8 @@ public class ChatActivity extends BaseFragment implements
                             for (int i = 0; i < selectedMessagesIds[a].size(); ++i) {
                                 MessageObject msg = selectedMessagesIds[a].valueAt(i);
                                 if (msg == null) continue;
-                                if (msg.isVoiceOnce() || msg.isRoundOnce()) continue;
-                                if (msg.messageOwner.noforwards) continue;
+                                if ((msg.isVoiceOnce() || msg.isRoundOnce()) && !SharedConfig.allowSaveRestrictedMedia) continue;
+                                if (msg.messageOwner.noforwards && !SharedConfig.allowSaveRestrictedMedia) continue;
                                 if (msg.isVoice() || msg.isRoundVideo())
                                     show = true;
                             }
@@ -24905,56 +24925,7 @@ public class ChatActivity extends BaseFragment implements
     private Pattern sponsoredUrlPattern;
     private MessageObject botSponsoredMessage;
     private void addSponsoredMessages(boolean animated) {
-        if (sponsoredMessagesAdded || chatMode != 0 || !ChatObject.isChannel(currentChat) && !UserObject.isBot(currentUser) || !forwardEndReached[0] || getUserConfig().isPremium() && getMessagesController().isSponsoredDisabled() || isReport()) {
-            return;
-        }
-        MessagesController.SponsoredMessagesInfo res = getMessagesController().getSponsoredMessages(dialog_id);
-        if (res == null || res.messages == null) {
-            return;
-        }
-        for (int i = 0; i < res.messages.size(); i++) {
-            MessageObject messageObject = res.messages.get(i);
-            messageObject.resetLayout();
-            if (messageObject.sponsoredUrl != null) {
-                try {
-                    if (sponsoredUrlPattern == null) {
-                        sponsoredUrlPattern = Pattern.compile("https://t\\.me/(\\w+)(?:/(\\d+))?");
-                    }
-                    Matcher matcher = sponsoredUrlPattern.matcher(messageObject.sponsoredUrl);
-                    if (matcher.matches()) {
-                        String username = matcher.group(1);
-                        int postId = 0;
-                        try {
-                            postId = matcher.groupCount() >= 2 ? Integer.parseInt(matcher.group(2)) : 0;
-                        } catch (Exception e2) {}
-                        TLObject obj = getMessagesController().getUserOrChat(username);
-                        long did;
-                        if (obj instanceof TLRPC.User) {
-                            did = ((TLRPC.User) obj).id;
-                        } else if (obj instanceof TLRPC.Chat) {
-                            did = -((TLRPC.Chat) obj).id;
-                        } else {
-                            continue;
-                        }
-                        if (postId < 0) continue;
-                        getMessagesController().ensureMessagesLoaded(did, postId, null);
-                    }
-                } catch (Exception e) {
-                    FileLog.e(e, false);
-                }
-            }
-        }
-        sponsoredMessagesAdded = true;
-        if (UserObject.isBot(currentUser)) {
-            botSponsoredMessage = res == null || res.messages == null || res.messages.isEmpty() ? null : res.messages.get(0);
-            updateTopPanel(true);
-        } else {
-            sponsoredMessagesPostsBetween = res.posts_between != null ? res.posts_between : 0;
-            if (notPushedSponsoredMessages != null) {
-                notPushedSponsoredMessages.clear();
-            }
-            processNewMessages(res.messages, false);
-        }
+        return;
     }
 
     public void removeFromSponsored(MessageObject message) {
@@ -26344,6 +26315,18 @@ public class ChatActivity extends BaseFragment implements
                             replyObject.viewsReloaded = false;
                         }
                     }
+                }
+                boolean keepSelfDestruct = SharedConfig.keepSelfDestructingMedia && MessagesController.isSelfDestructingMessage(obj);
+                if ((SharedConfig.saveDeletedMessages || keepSelfDestruct) && (!getMessagesController().isUserDeletedMessage(mid) || keepSelfDestruct) && !obj.scheduled) {
+                    obj.wasDeleted = true;
+                    if (editingMessageObject == obj) {
+                        hideFieldPanel(true);
+                    }
+                    int index = chatAdapter != null && chatAdapter.isFiltered && filteredMessagesDict != null ? chatAdapter.filteredMessages.indexOf(filteredMessagesDict.get(mid)) : messages.indexOf(obj);
+                    if (index != -1 && chatAdapter != null) {
+                        chatAdapter.notifyItemChanged(chatAdapter.messagesStartRow + index);
+                    }
+                    continue;
                 }
                 obj.deleted = true;
                 if (obj.scheduled && sent) {
@@ -30837,8 +30820,8 @@ public class ChatActivity extends BaseFragment implements
             allowPin = false;
         }
         allowPin = allowPin && message.getId() > 0 && (message.messageOwner.action == null || message.messageOwner.action instanceof TLRPC.TL_messageActionEmpty) && !message.isExpiredStory() && message.type != MessageObject.TYPE_STORY_MENTION;
-        boolean noforwards = isPeerNoForwards() || message.messageOwner.noforwards || getDialogId() == UserObject.VERIFY;
-        boolean noforwardsOrPaidMedia = noforwards || message.type == MessageObject.TYPE_PAID_MEDIA;
+        boolean noforwards = (!SharedConfig.allowSaveRestrictedMedia && (isPeerNoForwards() || message.messageOwner.noforwards)) || getDialogId() == UserObject.VERIFY;
+        boolean noforwardsOrPaidMedia = !SharedConfig.allowSaveRestrictedMedia && (noforwards || message.type == MessageObject.TYPE_PAID_MEDIA);
         boolean allowUnpin = message.getDialogId() != mergeDialogId && allowPin && (pinnedMessageObjects.containsKey(message.getId()) || groupedMessages != null && !groupedMessages.messages.isEmpty() && pinnedMessageObjects.containsKey(groupedMessages.messages.get(0).getId())) && !message.isExpiredStory();
         boolean allowEdit = message.canEditMessage(currentChat) && !chatActivityEnterView.hasAudioToSend() && message.getDialogId() != mergeDialogId && message.type != MessageObject.TYPE_STORY && message.type != MessageObject.TYPE_POLL;
         if (allowEdit && groupedMessages != null) {
@@ -31213,6 +31196,9 @@ public class ChatActivity extends BaseFragment implements
                                             }
                                             args.putInt("report_reaction_message_id", primaryMessage.getId());
                                             args.putLong("report_reaction_from_dialog_id", dialog_id);
+                                            if (currentChat != null) {
+                                                args.putLong("from_chat_id", currentChat.id);
+                                            }
                                             ProfileActivity fragment = new ProfileActivity(args);
                                             presentFragment(fragment);
                                             closeMenu();
@@ -31551,6 +31537,9 @@ public class ChatActivity extends BaseFragment implements
                             args.putLong("user_id", userId);
                             if (userId == getUserConfig().getClientUserId()) {
                                 args.putBoolean("my_profile", true);
+                            }
+                            if (currentChat != null) {
+                                args.putLong("from_chat_id", currentChat.id);
                             }
                             presentFragment(new ProfileActivity(args));
                         }
@@ -32185,7 +32174,7 @@ public class ChatActivity extends BaseFragment implements
                     }
                 }
 
-                boolean showNoForwards = (isPeerNoForwards() || message.messageOwner.noforwards && currentUser != null && currentUser.bot) && message.messageOwner.action == null && message.isSent() && !message.isEditing() && chatMode != MODE_SCHEDULED && chatMode != MODE_SAVED && getDialogId() != UserObject.VERIFY;
+                boolean showNoForwards = !SharedConfig.allowSaveRestrictedMedia && (isPeerNoForwards() || message.messageOwner.noforwards && currentUser != null && currentUser.bot) && message.messageOwner.action == null && message.isSent() && !message.isEditing() && chatMode != MODE_SCHEDULED && chatMode != MODE_SAVED && getDialogId() != UserObject.VERIFY;
                 scrimPopupContainerLayout.addView(popupLayout, LayoutHelper.createLinearRelatively(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT, isReactionsAvailable ? 16 : 0, 0, isReactionsAvailable ? 36 : 0, 0));
                 scrimPopupContainerLayout.setPopupWindowLayout(popupLayout);
                 if (showNoForwards) {
@@ -33596,7 +33585,7 @@ public class ChatActivity extends BaseFragment implements
                 break;
             }
             case OPTION_REPLY: {
-                if (selectedObject != null && selectedObject.messageOwner != null && selectedObject.messageOwner.noforwards) {
+                if (selectedObject != null && selectedObject.messageOwner != null && selectedObject.messageOwner.noforwards && !SharedConfig.allowSaveRestrictedMedia) {
                     return;
                 }
                 if (selectedObject != null && currentChat != null && (ChatObject.isNotInChat(currentChat) && !ChatObject.isMonoForum(currentChat) && !isThreadChat() || ChatObject.isChannel(currentChat) && !ChatObject.canPost(currentChat) && !currentChat.megagroup || !ChatObject.canSendMessages(currentChat))) {
@@ -33774,6 +33763,15 @@ public class ChatActivity extends BaseFragment implements
                     startEditingMessageObject(selectedObjectToEditCaption, option == OPTION_SUGGESTION_EDIT_MESSAGE);
                 } else {
                     startEditingMessageObject(selectedObject, option == OPTION_SUGGESTION_EDIT_MESSAGE);
+                }
+                selectedObject = null;
+                selectedObjectGroup = null;
+                selectedObjectToEditCaption = null;
+                break;
+            }
+            case OPTION_EDIT_HISTORY: {
+                if (selectedObject != null) {
+                    EditHistoryBottomSheet.show(this, selectedObject);
                 }
                 selectedObject = null;
                 selectedObjectGroup = null;
@@ -34038,10 +34036,26 @@ public class ChatActivity extends BaseFragment implements
             }
             case OPTION_EDIT_TODO:
             case OPTION_ADD_TO_TODO: {
+                final MessageObject object = selectedObject;
+                if (object != null && object.isAltChecklist) {
+                    final boolean adding = option == OPTION_ADD_TO_TODO;
+                    PollCreateActivity pollCreateActivity = new PollCreateActivity(ChatActivity.this, true, false);
+                    pollCreateActivity.setEditing(MessageObject.getMedia(object), adding);
+                    pollCreateActivity.setDelegate((poll, params, notify, scheduleDate) -> {
+                        if (poll instanceof TLRPC.TL_messageMediaToDo) {
+                            TLRPC.TL_messageMediaToDo m = (TLRPC.TL_messageMediaToDo) poll;
+                            String newText = buildAlternativeChecklistText(m);
+                            object.messageOwner.message = newText;
+                            object.buildAlternativeChecklist();
+                            getSendMessagesHelper().editMessage(object, newText, false, ChatActivity.this, null, 0, 0);
+                        }
+                    });
+                    presentFragment(pollCreateActivity);
+                    break;
+                }
                 if (!getUserConfig().isPremium()) {
                     showDialog(new PremiumFeatureBottomSheet(ChatActivity.this, PremiumPreviewFragment.PREMIUM_FEATURE_TODO, false));
                 } else {
-                    final MessageObject object = selectedObject;
                     final boolean adding = option == OPTION_ADD_TO_TODO;
                     final int oldAnswersCount;
                     if (MessageObject.getMedia(object) instanceof TLRPC.TL_messageMediaToDo) {
@@ -34218,7 +34232,11 @@ public class ChatActivity extends BaseFragment implements
             case OPTION_EDIT_SCHEDULE_TIME: {
                 MessageObject message = selectedObject;
                 MessageObject.GroupedMessages group = selectedObjectGroup;
-                AlertsCreator.createScheduleDatePickerDialog(getParentActivity(), dialog_id, message.messageOwner.date, message.messageOwner.schedule_repeat_period, (notify, scheduleDate, scheduleRepeatPeriod) -> {
+                int repeatPeriod = message.messageOwner.schedule_repeat_period;
+                if (repeatPeriod == 0) {
+                    repeatPeriod = org.telegram.messenger.LocalRepeatController.getInstance(currentAccount).getRepeatPeriod(dialog_id, message.getId());
+                }
+                AlertsCreator.createScheduleDatePickerDialog(getParentActivity(), dialog_id, message.messageOwner.date, repeatPeriod, (notify, scheduleDate, scheduleRepeatPeriod) -> {
                     if (group != null && !group.messages.isEmpty()) {
                         SendMessagesHelper.getInstance(currentAccount).editMessage(group.messages.get(0), null, false, ChatActivity.this, null, scheduleDate, scheduleRepeatPeriod);
                     } else {
@@ -35548,6 +35566,43 @@ public class ChatActivity extends BaseFragment implements
         }
     }
 
+    public void sendAlternativeTodo(TLRPC.TL_messageMediaToDo todo, boolean notify, int scheduleDate, long payStars) {
+        if (todo == null || todo.todo == null) return;
+        if (checkSlowModeAlert()) {
+            String text = buildAlternativeChecklistText(todo);
+            final SendMessagesHelper.SendMessageParams params = SendMessagesHelper.SendMessageParams.of(
+                text, dialog_id, replyingMessageObject, getThreadMessage(), null, false, null, null, null, notify, scheduleDate, 0, null, false
+            );
+            params.sendMessageChatArguments = getMessageChatSendParams();
+            params.payStars = payStars;
+            params.monoForumPeer = getSendMonoForumPeerId();
+            params.suggestionParams = messageSuggestionParams;
+            getSendMessagesHelper().sendMessage(params);
+            afterMessageSend();
+        }
+    }
+
+    public static String buildAlternativeChecklistText(TLRPC.TL_messageMediaToDo todo) {
+        if (todo == null || todo.todo == null) return "";
+        StringBuilder sb = new StringBuilder();
+        sb.append("\u200B📋 ");
+        if (todo.todo.title != null && !TextUtils.isEmpty(todo.todo.title.text)) {
+            sb.append(todo.todo.title.text.trim());
+        } else {
+            sb.append("Checklist");
+        }
+        sb.append("\n");
+        if (todo.todo.list != null) {
+            for (TLRPC.TodoItem item : todo.todo.list) {
+                if (item != null && item.title != null && !TextUtils.isEmpty(item.title.text)) {
+                    boolean completed = MessageObject.isCompleted(todo, item.id);
+                    sb.append(completed ? "☑ " : "☐ ").append(item.title.text.trim()).append("\n");
+                }
+            }
+        }
+        return sb.toString().trim();
+    }
+
     public void sendMedia(MediaController.PhotoEntry photoEntry, VideoEditedInfo videoEditedInfo, boolean notify, int scheduleDate, int scheduleRepeatPeriod, boolean forceDocument, long stars) {
         if (photoEntry == null) {
             return;
@@ -36157,7 +36212,7 @@ public class ChatActivity extends BaseFragment implements
                     builder.setTitleMultipleLines(true);
                 }
                 final int finalTimestamp = timestamp;
-                boolean noforwards = isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards);
+                boolean noforwards = !SharedConfig.allowSaveRestrictedMedia && (isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards));
                 builder.setItems(noforwards ? new CharSequence[] {LocaleController.getString(R.string.Open)} : new CharSequence[]{LocaleController.getString(R.string.Open), LocaleController.getString(R.string.Copy)}, (dialog, which) -> {
                     if (which == 0) {
                         if (str.startsWith("video?")) {
@@ -36530,7 +36585,7 @@ public class ChatActivity extends BaseFragment implements
         if (url == null || getParentActivity() == null) {
             return;
         }
-        boolean noforwards = isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards);
+        boolean noforwards = !SharedConfig.allowSaveRestrictedMedia && (isPeerNoForwards() || (messageObject != null && messageObject.messageOwner != null && messageObject.messageOwner.noforwards));
         if (url instanceof URLSpanMono) {
             if (!noforwards || getDialogId() == UserObject.VERIFY) {
                 ((URLSpanMono) url).copyToClipboard();
@@ -39412,6 +39467,10 @@ public class ChatActivity extends BaseFragment implements
 
         @Override
         public void didPressTime(ChatMessageCell cell) {
+            if (cell != null && cell.isEdited() && SharedConfig.saveEditHistory) {
+                EditHistoryBottomSheet.show(ChatActivity.this, cell.getMessageObject());
+                return;
+            }
             createUndoView();
             if (undoView == null) {
                 return;
@@ -39501,8 +39560,7 @@ public class ChatActivity extends BaseFragment implements
             return messageObject != null
                 && messageObject.messageOwner != null
                 && chatMode != MODE_SCHEDULED
-                && !isPeerNoForwards()
-                && !messageObject.messageOwner.noforwards
+                && (SharedConfig.allowSaveRestrictedMedia || (!isPeerNoForwards() && !messageObject.messageOwner.noforwards))
                 && messageObject.type != MessageObject.TYPE_PAID_MEDIA;
         }
 
@@ -39890,6 +39948,9 @@ public class ChatActivity extends BaseFragment implements
                 Bundle args = new Bundle();
                 args.putLong("user_id", user.id);
                 args.putBoolean("expandPhoto", expandPhoto);
+                if (currentChat != null) {
+                    args.putLong("from_chat_id", currentChat.id);
+                }
                 ProfileActivity fragment = new ProfileActivity(args);
                 fragment.setPlayProfileAnimation(currentUser != null && currentUser.id == user.id ? 1 : 0);
                 AndroidUtilities.setAdjustResizeToNothing(getParentActivity(), classGuid);
@@ -40601,17 +40662,35 @@ public class ChatActivity extends BaseFragment implements
                     .createSimpleBulletin(R.raw.passcode_lock_close, AndroidUtilities.replaceTags(formatString(R.string.TodoCompleteForbiddenForward, DialogObject.getName(currentAccount, fromId))))
                     .show(true);
                 return false;
+            } else if (cell.getMessageObject().isAltChecklist) {
+                MessageObject messageObject = cell.getMessageObject();
+                boolean canEdit = messageObject.isOutOwner() || messageObject.getDialogId() == getUserConfig().getClientUserId();
+                if (!canEdit) {
+                    TLRPC.Chat chat = getCurrentChat();
+                    if (chat != null && (chat.creator || (chat.admin_rights != null && chat.admin_rights.edit_messages))) {
+                        canEdit = true;
+                    }
+                }
+                if (!canEdit) {
+                    BulletinFactory.of(ChatActivity.this)
+                        .createSimpleBulletin(R.raw.passcode_lock_close, "Only the checklist creator can check off tasks.")
+                        .show(true);
+                    return false;
+                }
+                String text = messageObject.messageOwner != null ? messageObject.messageOwner.message : null;
+                String newText = MessageObject.toggleAlternativeChecklistTask(text, task.id, enable);
+                if (newText != null && !newText.equals(text)) {
+                    messageObject.messageOwner.message = newText;
+                    messageObject.buildAlternativeChecklist();
+                    cell.forceResetMessageObject();
+                    getSendMessagesHelper().editMessage(messageObject, newText, false, ChatActivity.this, null, 0, 0);
+                    return true;
+                }
+                return false;
             } else if (!cell.getMessageObject().canCompleteTodo()) {
                 final long fromId = DialogObject.getPeerDialogId(cell.getMessageObject().getFromPeer());
                 BulletinFactory.of(ChatActivity.this)
                     .createSimpleBulletin(R.raw.passcode_lock_close, AndroidUtilities.replaceTags(formatString(R.string.TodoCompleteForbidden, DialogObject.getName(currentAccount, fromId))))
-                    .show(true);
-                return false;
-            } else if (!getUserConfig().isPremium()) {
-                BulletinFactory.of(ChatActivity.this)
-                    .createSimpleBulletin(R.raw.star_premium_2, AndroidUtilities.premiumText(getString(R.string.TodoPremiumRequired), () -> {
-                        showDialog(new PremiumFeatureBottomSheet(ChatActivity.this, PremiumPreviewFragment.PREMIUM_FEATURE_TODO, false));
-                    }))
                     .show(true);
                 return false;
             } else {
@@ -41612,6 +41691,10 @@ public class ChatActivity extends BaseFragment implements
         }
         
         private void didPressAppUpdateButtonInternal() {
+            if (!BuildVars.CHECK_UPDATES) {
+                BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.raw.chats_infotip, LocaleController.getString(R.string.YourVersionIsLatest)).show();
+                return;
+            }
             if (ApplicationLoader.isStandaloneBuild()) {
                 if (LaunchActivity.instance != null) {
                     /*
@@ -42214,6 +42297,9 @@ public class ChatActivity extends BaseFragment implements
             args.putLong("user_id", uid);
             if (currentEncryptedChat != null && uid == currentUser.id) {
                 args.putLong("dialog_id", dialog_id);
+            }
+            if (currentChat != null) {
+                args.putLong("from_chat_id", currentChat.id);
             }
             ProfileActivity fragment = new ProfileActivity(args);
             fragment.setPlayProfileAnimation(currentUser != null && currentUser.id == uid ? 1 : 0);
@@ -45695,8 +45781,8 @@ public class ChatActivity extends BaseFragment implements
             allowPin = false;
         }
         allowPin = allowPin && message.getId() > 0 && (message.messageOwner.action == null || message.messageOwner.action instanceof TLRPC.TL_messageActionEmpty) && !message.isExpiredStory() && message.type != MessageObject.TYPE_STORY_MENTION;
-        boolean noforwards = isPeerNoForwards() || message.messageOwner.noforwards || getDialogId() == UserObject.VERIFY;
-        boolean noforwardsOrPaidMedia = noforwards || message.type == MessageObject.TYPE_PAID_MEDIA;
+        boolean noforwards = (!SharedConfig.allowSaveRestrictedMedia && (isPeerNoForwards() || message.messageOwner.noforwards)) || getDialogId() == UserObject.VERIFY;
+        boolean noforwardsOrPaidMedia = !SharedConfig.allowSaveRestrictedMedia && (noforwards || message.type == MessageObject.TYPE_PAID_MEDIA);
         boolean allowUnpin = !isEphemeral && message.getDialogId() != mergeDialogId && allowPin && (pinnedMessageObjects.containsKey(message.getId()) || groupedMessages != null && !groupedMessages.messages.isEmpty() && pinnedMessageObjects.containsKey(groupedMessages.messages.get(0).getId())) && !message.isExpiredStory();
         boolean allowEdit = !isEphemeral && message.canEditMessage(currentChat) && !chatActivityEnterView.hasAudioToSend() && message.getDialogId() != mergeDialogId && message.type != MessageObject.TYPE_STORY && message.type != MessageObject.TYPE_POLL;
         if (allowEdit && groupedMessages != null) {
@@ -45815,6 +45901,11 @@ public class ChatActivity extends BaseFragment implements
                 if (message.canEditMessage(currentChat) && message.type != MessageObject.TYPE_POLL || chatMode == MODE_WELCOME_MESSAGES) {
                     items.add(LocaleController.getString(R.string.Edit));
                     options.add(OPTION_EDIT);
+                    icons.add(R.drawable.msg_edit);
+                }
+                if (SharedConfig.saveEditHistory && selectedObject != null && (selectedObject.isEdited() || selectedObject.hasEditHistory || (selectedObject.messageOwner != null && (selectedObject.messageOwner.flags & TLRPC.MESSAGE_FLAG_EDITED) != 0))) {
+                    items.add(LocaleController.getString(R.string.EditHistory));
+                    options.add(OPTION_EDIT_HISTORY);
                     icons.add(R.drawable.msg_edit);
                 }
                 if (ChatObject.isMonoForum(currentChat) && selectedObject.getGroupId() == 0 && selectedObjectGroup == null && message != null && message.messageOwner != null && message.messageOwner.suggested_post == null && message.messageOwner.action == null) {
@@ -45975,11 +46066,11 @@ public class ChatActivity extends BaseFragment implements
                                     icons.add(R.drawable.msg_addbot);
                                 }
                             }
-                        } else if (selectedObject.isMusic() && !noforwardsOrPaidMedia && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
+                        } else if (selectedObject.isMusic() && !noforwardsOrPaidMedia && (!selectedObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia) && (!selectedObject.isRoundOnce() || SharedConfig.allowSaveRestrictedMedia)) {
                             items.add(LocaleController.getString(R.string.SaveToMusic));
                             options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
                             icons.add(R.drawable.msg_download);
-                        } else if (selectedObject.isDocument() && !noforwardsOrPaidMedia && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
+                        } else if (selectedObject.isDocument() && !noforwardsOrPaidMedia && (!selectedObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia) && (!selectedObject.isRoundOnce() || SharedConfig.allowSaveRestrictedMedia)) {
                             items.add(LocaleController.getString(R.string.SaveToDownloads));
                             options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
                             icons.add(R.drawable.msg_download);
@@ -46002,14 +46093,14 @@ public class ChatActivity extends BaseFragment implements
                                 options.add(OPTION_SHARE);
                                 icons.add(R.drawable.msg_shareout);
                             }
-                        } else if (selectedObject.isMusic() && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
+                        } else if (selectedObject.isMusic() && (!selectedObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia) && (!selectedObject.isRoundOnce() || SharedConfig.allowSaveRestrictedMedia)) {
                             items.add(LocaleController.getString(R.string.SaveToMusic));
                             options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
                             icons.add(R.drawable.msg_download);
                             items.add(LocaleController.getString(R.string.ShareFile));
                             options.add(OPTION_SHARE);
                             icons.add(R.drawable.msg_shareout);
-                        } else if (selectedObject.getDocument() != null && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
+                        } else if (selectedObject.getDocument() != null && (!selectedObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia) && (!selectedObject.isRoundOnce() || SharedConfig.allowSaveRestrictedMedia)) {
                             if (MessageObject.isNewGifDocument(selectedObject.getDocument())) {
                                 items.add(LocaleController.getString(R.string.SaveToGIFs));
                                 options.add(OPTION_ADD_TO_GIFS);
@@ -46033,7 +46124,7 @@ public class ChatActivity extends BaseFragment implements
                     items.add(LocaleController.getString(R.string.ApplyLocalizationFile));
                     options.add(OPTION_APPLY_LOCALIZATION_OR_THEME);
                     icons.add(R.drawable.msg_language);
-                    if (!noforwardsOrPaidMedia && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
+                    if (!noforwardsOrPaidMedia && (!selectedObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia) && (!selectedObject.isRoundOnce() || SharedConfig.allowSaveRestrictedMedia)) {
                         items.add(LocaleController.getString(R.string.SaveToDownloads));
                         options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
                         icons.add(R.drawable.msg_download);
@@ -46045,7 +46136,7 @@ public class ChatActivity extends BaseFragment implements
                     items.add(LocaleController.getString(R.string.ApplyThemeFile));
                     options.add(OPTION_APPLY_LOCALIZATION_OR_THEME);
                     icons.add(R.drawable.msg_theme);
-                    if (!noforwardsOrPaidMedia && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
+                    if (!noforwardsOrPaidMedia && (!selectedObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia || SharedConfig.keepSelfDestructingMedia) && (!selectedObject.isRoundOnce() || SharedConfig.allowSaveRestrictedMedia || SharedConfig.keepSelfDestructingMedia)) {
                         items.add(LocaleController.getString(R.string.SaveToDownloads));
                         options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
                         icons.add(R.drawable.msg_download);
@@ -46054,7 +46145,7 @@ public class ChatActivity extends BaseFragment implements
                         icons.add(R.drawable.msg_shareout);
                     }
                 } else if (type == 6 && !noforwardsOrPaidMedia && !selectedObject.hasRevealedExtendedMedia()) {
-                    if (!selectedObject.needDrawBluredPreview() && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
+                    if ((!selectedObject.needDrawBluredPreview() || SharedConfig.keepSelfDestructingMedia || SharedConfig.allowSaveRestrictedMedia) && (!selectedObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia || SharedConfig.keepSelfDestructingMedia) && (!selectedObject.isRoundOnce() || SharedConfig.allowSaveRestrictedMedia || SharedConfig.keepSelfDestructingMedia)) {
                         items.add(LocaleController.getString(R.string.SaveToGallery));
                         options.add(OPTION_SAVE_TO_GALLERY2);
                         icons.add(R.drawable.msg_gallery);
@@ -46126,10 +46217,10 @@ public class ChatActivity extends BaseFragment implements
                 final boolean canForward = !selectedObject.isSponsored()
                     && !isQuickRepliesOrWelcomeMessagesMode()
                     && chatMode != MODE_SCHEDULED
-                    && (!selectedObject.needDrawBluredPreview() || selectedObject.hasExtendedMediaPreview())
+                    && (!selectedObject.needDrawBluredPreview() || selectedObject.hasExtendedMediaPreview() || SharedConfig.keepSelfDestructingMedia || SharedConfig.allowSaveRestrictedMedia)
                     && !selectedObject.isLiveLocation()
                     && selectedObject.type != MessageObject.TYPE_PHONE_CALL
-                    && !noforwards && selectedObject.type != MessageObject.TYPE_SHARING_OFFER
+                    && (!noforwards || SharedConfig.keepSelfDestructingMedia || SharedConfig.allowSaveRestrictedMedia) && selectedObject.type != MessageObject.TYPE_SHARING_OFFER
                     && selectedObject.type != MessageObject.TYPE_GIFT_PREMIUM
                     && selectedObject.type != MessageObject.TYPE_GIFT_OFFER
                     && selectedObject.type != MessageObject.TYPE_COMMUNITY_CHANGED
@@ -46162,6 +46253,11 @@ public class ChatActivity extends BaseFragment implements
                 if (allowEdit || chatMode == MODE_WELCOME_MESSAGES) {
                     items.add(LocaleController.getString(R.string.Edit));
                     options.add(OPTION_EDIT);
+                    icons.add(R.drawable.msg_edit);
+                }
+                if (SharedConfig.saveEditHistory && selectedObject != null && (selectedObject.isEdited() || selectedObject.hasEditHistory || (selectedObject.messageOwner != null && (selectedObject.messageOwner.flags & TLRPC.MESSAGE_FLAG_EDITED) != 0))) {
+                    items.add(LocaleController.getString(R.string.EditHistory));
+                    options.add(OPTION_EDIT_HISTORY);
                     icons.add(R.drawable.msg_edit);
                 }
                 if (ChatObject.isMonoForum(currentChat) && selectedObject.getGroupId() == 0 && selectedObjectGroup == null && message != null && message.messageOwner != null && message.messageOwner.suggested_post == null && message.messageOwner.action == null) {
@@ -46221,7 +46317,7 @@ public class ChatActivity extends BaseFragment implements
                     options.add(OPTION_VIEW_IN_TOPIC);
                     icons.add(R.drawable.msg_viewintopic);
                 }
-                if (type == 4 && !noforwardsOrPaidMedia && !selectedObject.hasRevealedExtendedMedia() && !selectedObject.needDrawBluredPreview()) {
+                if (type == 4 && !noforwardsOrPaidMedia && !selectedObject.hasRevealedExtendedMedia() && (!selectedObject.needDrawBluredPreview() || SharedConfig.keepSelfDestructingMedia || SharedConfig.allowSaveRestrictedMedia)) {
                     if (selectedObject.isVideo()) {
                         items.add(LocaleController.getString(R.string.SaveToGallery));
                         options.add(OPTION_SAVE_TO_GALLERY);
@@ -46229,14 +46325,14 @@ public class ChatActivity extends BaseFragment implements
                         items.add(LocaleController.getString(R.string.ShareFile));
                         options.add(OPTION_SHARE);
                         icons.add(R.drawable.msg_shareout);
-                    } else if (selectedObject.isMusic() && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
+                    } else if (selectedObject.isMusic() && (!selectedObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia || SharedConfig.keepSelfDestructingMedia) && (!selectedObject.isRoundOnce() || SharedConfig.allowSaveRestrictedMedia || SharedConfig.keepSelfDestructingMedia)) {
                         items.add(LocaleController.getString(R.string.SaveToMusic));
                         options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
                         icons.add(R.drawable.msg_download);
                         items.add(LocaleController.getString(R.string.ShareFile));
                         options.add(OPTION_SHARE);
                         icons.add(R.drawable.msg_shareout);
-                    } else if (!selectedObject.isVideo() && selectedObject.getDocument() != null && !selectedObject.isVoiceOnce() && !selectedObject.isRoundOnce()) {
+                    } else if (!selectedObject.isVideo() && selectedObject.getDocument() != null && (!selectedObject.isVoiceOnce() || SharedConfig.allowSaveRestrictedMedia || SharedConfig.keepSelfDestructingMedia) && (!selectedObject.isRoundOnce() || SharedConfig.allowSaveRestrictedMedia || SharedConfig.keepSelfDestructingMedia)) {
                         items.add(LocaleController.getString(R.string.SaveToDownloads));
                         options.add(OPTION_SAVE_TO_DOWNLOADS_OR_MUSIC);
                         icons.add(R.drawable.msg_download);

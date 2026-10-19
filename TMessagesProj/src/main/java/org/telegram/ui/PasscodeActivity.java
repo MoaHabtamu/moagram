@@ -43,12 +43,18 @@ import androidx.annotation.IntDef;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
+import androidx.core.content.ContextCompat;
+import androidx.core.hardware.fingerprint.FingerprintManagerCompat;
+import androidx.fragment.app.FragmentActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.FingerprintController;
+import org.telegram.messenger.HiddenChatsController;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
@@ -87,6 +93,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class PasscodeActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate {
@@ -103,6 +110,7 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
     public @interface PasscodeActivityType {}
 
     private final static int ID_SWITCH_TYPE = 1;
+    private final static int ID_FINGERPRINT = 2;
 
     private RLottieImageView lockImageView;
 
@@ -157,6 +165,12 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
     };
 
     private Runnable onShowKeyboardCallback;
+    private boolean isHiddenChats;
+
+    public PasscodeActivity setForHiddenChats(boolean forHiddenChats) {
+        this.isHiddenChats = forHiddenChats;
+        return this;
+    }
 
     public PasscodeActivity(@PasscodeActivityType int type) {
         super();
@@ -381,9 +395,19 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
 
                     ActionBarMenuSubItem switchItem;
                     if (type == TYPE_SETUP_CODE) {
-                        otherItem = menu.addItem(0, R.drawable.ic_ab_other);
-                        switchItem = otherItem.addSubItem(ID_SWITCH_TYPE, R.drawable.msg_permissions, LocaleController.getString(R.string.PasscodeSwitchToPassword));
-                    } else switchItem = null;
+                        if (!isHiddenChats) {
+                            otherItem = menu.addItem(0, R.drawable.ic_ab_other);
+                            switchItem = otherItem.addSubItem(ID_SWITCH_TYPE, R.drawable.msg_permissions, LocaleController.getString(R.string.PasscodeSwitchToPassword));
+                        } else {
+                            switchItem = null;
+                        }
+                    } else {
+                        switchItem = null;
+                        if (canUseFingerprint()) {
+                            ActionBarMenuItem fingerprintItem = menu.addItem(ID_FINGERPRINT, R.drawable.fingerprint);
+                            fingerprintItem.setContentDescription(LocaleController.getString(R.string.AccDescrFingerprint));
+                        }
+                    }
 
                     actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
                         @Override
@@ -406,6 +430,8 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
                                     f.setText("");
                                 }
                                 updateFields();
+                            } else if (id == ID_FINGERPRINT) {
+                                checkFingerprint();
                             }
                         }
                     });
@@ -430,13 +456,20 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
                 titleTextView.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
                 titleTextView.setTypeface(AndroidUtilities.bold());
                 if (type == TYPE_SETUP_CODE) {
-                    if (!SharedConfig.passcodeHash.isEmpty()) {
+                    if (isHiddenChats) {
+                        HiddenChatsController hc = HiddenChatsController.getInstance(currentAccount);
+                        if (hc.hasCustomPasscode()) {
+                            titleTextView.setText("Enter New Hidden Chats PIN");
+                        } else {
+                            titleTextView.setText("Create Hidden Chats PIN");
+                        }
+                    } else if (!SharedConfig.passcodeHash.isEmpty()) {
                         titleTextView.setText(LocaleController.getString(R.string.EnterNewPasscode));
                     } else {
                         titleTextView.setText(LocaleController.getString(R.string.CreatePasscode));
                     }
                 } else {
-                    titleTextView.setText(LocaleController.getString(R.string.EnterYourPasscode));
+                    titleTextView.setText(isHiddenChats ? "Enter Hidden Chats PIN" : LocaleController.getString(R.string.EnterYourPasscode));
                 }
                 titleTextView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 18);
                 titleTextView.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -830,6 +863,9 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
     public void onTransitionAnimationEnd(boolean isOpen, boolean backward) {
         if (isOpen && type != TYPE_MANAGE_CODE_SETTINGS) {
             showKeyboard();
+            if (!backward && type == TYPE_ENTER_CODE_TO_MANAGE_SETTINGS && canUseFingerprint()) {
+                checkFingerprint();
+            }
         }
     }
 
@@ -848,16 +884,16 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
     private void updateFields() {
         String text;
         if (type == TYPE_ENTER_CODE_TO_MANAGE_SETTINGS) {
-            text = LocaleController.getString(R.string.EnterYourPasscodeInfo);
+            text = isHiddenChats ? "Enter your PIN to open hidden chats." : LocaleController.getString(R.string.EnterYourPasscodeInfo);
         } else if (passcodeSetStep == 0) {
-            text = LocaleController.getString(currentPasswordType == SharedConfig.PASSCODE_TYPE_PIN ? R.string.CreatePasscodeInfoPIN : R.string.CreatePasscodeInfoPassword);
+            text = isHiddenChats ? "Enter a 4-digit PIN to protect your hidden chats." : LocaleController.getString(currentPasswordType == SharedConfig.PASSCODE_TYPE_PIN ? R.string.CreatePasscodeInfoPIN : R.string.CreatePasscodeInfoPassword);
         } else text = descriptionTextSwitcher.getCurrentView().getText().toString();
 
         boolean animate = !(descriptionTextSwitcher.getCurrentView().getText().equals(text) || TextUtils.isEmpty(descriptionTextSwitcher.getCurrentView().getText()));
         if (type == TYPE_ENTER_CODE_TO_MANAGE_SETTINGS) {
-            descriptionTextSwitcher.setText(LocaleController.getString(R.string.EnterYourPasscodeInfo), animate);
+            descriptionTextSwitcher.setText(text, animate);
         } else if (passcodeSetStep == 0) {
-            descriptionTextSwitcher.setText(LocaleController.getString(currentPasswordType == SharedConfig.PASSCODE_TYPE_PIN ? R.string.CreatePasscodeInfoPIN : R.string.CreatePasscodeInfoPassword), animate);
+            descriptionTextSwitcher.setText(text, animate);
         }
         if (isPinCode()) {
             AndroidUtilities.updateViewVisibilityAnimated(codeFieldContainer, true, 1f, animate);
@@ -877,6 +913,13 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
             floatingButton.setButtonVisible(false, animate);
         }
         setCustomKeyboardVisible(isCustomKeyboardVisible(), animate);
+        if (keyboardView != null) {
+            boolean showFingerprint = type == TYPE_ENTER_CODE_TO_MANAGE_SETTINGS && canUseFingerprint();
+            keyboardView.setFingerprintVisible(showFingerprint);
+            if (showFingerprint) {
+                keyboardView.setOnFingerprintClickListener(v -> checkFingerprint());
+            }
+        }
         showKeyboard();
     }
 
@@ -898,8 +941,8 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
             otherItem.setVisibility(View.GONE);
         }
 
-        titleTextView.setText(LocaleController.getString(R.string.ConfirmCreatePasscode));
-        descriptionTextSwitcher.setText(AndroidUtilities.replaceTags(LocaleController.getString(R.string.PasscodeReinstallNotice)));
+        titleTextView.setText(isHiddenChats ? "Confirm Hidden Chats PIN" : LocaleController.getString(R.string.ConfirmCreatePasscode));
+        descriptionTextSwitcher.setText(isHiddenChats ? "Re-enter your 4-digit PIN to confirm." : AndroidUtilities.replaceTags(LocaleController.getString(R.string.PasscodeReinstallNotice)));
         firstPassword = isPinCode() ? codeFieldContainer.getCode() : passwordEditText.getText().toString();
         passwordEditText.setText("");
         passwordEditText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -909,6 +952,12 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
     }
 
     private boolean isPinCode() {
+        if (isHiddenChats) {
+            if (HiddenChatsController.getInstance(currentAccount).isUseTelegramPasscode()) {
+                return SharedConfig.passcodeType == SharedConfig.PASSCODE_TYPE_PIN;
+            }
+            return true;
+        }
         return type == TYPE_SETUP_CODE && currentPasswordType == SharedConfig.PASSCODE_TYPE_PIN ||
                 type == TYPE_ENTER_CODE_TO_MANAGE_SETTINGS && SharedConfig.passcodeType == SharedConfig.PASSCODE_TYPE_PIN;
     }
@@ -944,22 +993,27 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
                 return;
             }
 
-            boolean isFirst = SharedConfig.passcodeHash.isEmpty();
-            try {
-                SharedConfig.passcodeSalt = new byte[16];
-                Utilities.random.nextBytes(SharedConfig.passcodeSalt);
-                byte[] passcodeBytes = firstPassword.getBytes(StandardCharsets.UTF_8);
-                byte[] bytes = new byte[32 + passcodeBytes.length];
-                System.arraycopy(SharedConfig.passcodeSalt, 0, bytes, 0, 16);
-                System.arraycopy(passcodeBytes, 0, bytes, 16, passcodeBytes.length);
-                System.arraycopy(SharedConfig.passcodeSalt, 0, bytes, passcodeBytes.length + 16, 16);
-                SharedConfig.passcodeHash = Utilities.bytesToHex(Utilities.computeSHA256(bytes, 0, bytes.length));
-            } catch (Exception e) {
-                FileLog.e(e);
+            final boolean isFirst = !isHiddenChats && SharedConfig.passcodeHash.isEmpty();
+            if (isHiddenChats) {
+                HiddenChatsController.getInstance(currentAccount).setPasscode(firstPassword);
+                HiddenChatsController.getInstance(currentAccount).setUseTelegramPasscode(false);
+            } else {
+                try {
+                    SharedConfig.passcodeSalt = new byte[16];
+                    Utilities.random.nextBytes(SharedConfig.passcodeSalt);
+                    byte[] passcodeBytes = firstPassword.getBytes(StandardCharsets.UTF_8);
+                    byte[] bytes = new byte[32 + passcodeBytes.length];
+                    System.arraycopy(SharedConfig.passcodeSalt, 0, bytes, 0, 16);
+                    System.arraycopy(passcodeBytes, 0, bytes, 16, passcodeBytes.length);
+                    System.arraycopy(SharedConfig.passcodeSalt, 0, bytes, passcodeBytes.length + 16, 16);
+                    SharedConfig.passcodeHash = Utilities.bytesToHex(Utilities.computeSHA256(bytes, 0, bytes.length));
+                } catch (Exception e) {
+                    FileLog.e(e);
+                }
+                SharedConfig.allowScreenCapture = true;
+                SharedConfig.passcodeType = currentPasswordType;
+                SharedConfig.saveConfig();
             }
-            SharedConfig.allowScreenCapture = true;
-            SharedConfig.passcodeType = currentPasswordType;
-            SharedConfig.saveConfig();
 
             passwordEditText.clearFocus();
             AndroidUtilities.hideKeyboard(passwordEditText);
@@ -970,8 +1024,15 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
             keyboardView.setEditText(null);
 
             animateSuccessAnimation(() -> {
-                getMediaDataController().buildShortcuts();
-                if (isFirst) {
+                if (!isHiddenChats) {
+                    getMediaDataController().buildShortcuts();
+                }
+                if (onPasscodeSuccess != null) {
+                    Runnable callback = onPasscodeSuccess;
+                    onPasscodeSuccess = null;
+                    finishFragment();
+                    AndroidUtilities.runOnUIThread(callback, 350);
+                } else if (!isHiddenChats && isFirst) {
                     presentFragment(new PasscodeActivity(TYPE_MANAGE_CODE_SETTINGS), true);
                     if (openedSettings != null) {
                         AndroidUtilities.runOnUIThread(openedSettings);
@@ -980,10 +1041,12 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
                 } else {
                     finishFragment();
                 }
-                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.didSetPasscode);
+                if (!isHiddenChats) {
+                    NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.didSetPasscode);
+                }
             });
         } else if (type == TYPE_ENTER_CODE_TO_MANAGE_SETTINGS) {
-            if (SharedConfig.passcodeRetryInMs > 0) {
+            if (!isHiddenChats && SharedConfig.passcodeRetryInMs > 0) {
                 int value = Math.max(1, (int) Math.ceil(SharedConfig.passcodeRetryInMs / 1000.0));
                 Toast.makeText(getParentActivity(), LocaleController.formatString("TooManyTries", R.string.TooManyTries, LocaleController.formatPluralString("Seconds", value)), Toast.LENGTH_SHORT).show();
 
@@ -997,8 +1060,13 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
                 onPasscodeError();
                 return;
             }
-            if (!SharedConfig.checkPasscode(password)) {
-                SharedConfig.increaseBadPasscodeTries();
+            boolean valid = isHiddenChats
+                    ? HiddenChatsController.getInstance(currentAccount).checkPasscode(password)
+                    : SharedConfig.checkPasscode(password);
+            if (!valid) {
+                if (!isHiddenChats) {
+                    SharedConfig.increaseBadPasscodeTries();
+                }
                 passwordEditText.setText("");
                 for (CodeNumberField f : codeFieldContainer.codeField) {
                     f.setText("");
@@ -1009,28 +1077,99 @@ public class PasscodeActivity extends BaseFragment implements NotificationCenter
                 onPasscodeError();
                 return;
             }
+            completePasscodeEntry();
+        }
+    }
+
+    private boolean canUseFingerprint() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || !SharedConfig.useFingerprintLock || getParentActivity() == null) {
+            return false;
+        }
+        try {
+            int authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.BIOMETRIC_WEAK;
+            boolean biometricAvailable = false;
+            try {
+                biometricAvailable = BiometricManager.from(getParentActivity()).canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS;
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+            if (!biometricAvailable) {
+                try {
+                    FingerprintManagerCompat fingerprintManager = FingerprintManagerCompat.from(ApplicationLoader.applicationContext);
+                    biometricAvailable = fingerprintManager.isHardwareDetected() && fingerprintManager.hasEnrolledFingerprints();
+                } catch (Throwable e) {
+                    FileLog.e(e);
+                }
+            }
+            return biometricAvailable;
+        } catch (Throwable e) {
+            FileLog.e(e);
+            return false;
+        }
+    }
+
+    private void checkFingerprint() {
+        if (!canUseFingerprint() || !(getParentActivity() instanceof FragmentActivity)) {
+            return;
+        }
+        try {
+            Executor executor = ContextCompat.getMainExecutor(getParentActivity());
+            BiometricPrompt prompt = new BiometricPrompt((FragmentActivity) getParentActivity(), executor, new BiometricPrompt.AuthenticationCallback() {
+                @Override
+                public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
+                    completePasscodeEntry();
+                }
+            });
+            int authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG | BiometricManager.Authenticators.BIOMETRIC_WEAK;
+            BiometricPrompt.PromptInfo promptInfo = new BiometricPrompt.PromptInfo.Builder()
+                    .setTitle(LocaleController.getString(R.string.UnlockToUse))
+                    .setNegativeButtonText(LocaleController.getString(R.string.UsePIN))
+                    .setAllowedAuthenticators(authenticators)
+                    .build();
+            prompt.authenticate(promptInfo);
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+    }
+
+    private void completePasscodeEntry() {
+        if (!isHiddenChats) {
             SharedConfig.badPasscodeTries = 0;
             SharedConfig.saveConfig();
-
-            passwordEditText.clearFocus();
-            AndroidUtilities.hideKeyboard(passwordEditText);
-            for (CodeNumberField f : codeFieldContainer.codeField) {
-                f.clearFocus();
-                AndroidUtilities.hideKeyboard(f);
-            }
-            keyboardView.setEditText(null);
-
-            animateSuccessAnimation(() -> {
+        }
+        passwordEditText.clearFocus();
+        AndroidUtilities.hideKeyboard(passwordEditText);
+        for (CodeNumberField f : codeFieldContainer.codeField) {
+            f.clearFocus();
+            AndroidUtilities.hideKeyboard(f);
+        }
+        keyboardView.setEditText(null);
+        animateSuccessAnimation(() -> {
+            if (onPasscodeSuccess != null) {
+                Runnable callback = onPasscodeSuccess;
+                onPasscodeSuccess = null;
+                finishFragment();
+                AndroidUtilities.runOnUIThread(callback, 350);
+            } else if (!isHiddenChats) {
                 presentFragment(new PasscodeActivity(TYPE_MANAGE_CODE_SETTINGS), true);
                 if (openedSettings != null) {
                     AndroidUtilities.runOnUIThread(openedSettings);
                     openedSettings = null;
                 }
-            });
-        }
+            } else {
+                finishFragment();
+            }
+        });
     }
 
     private Runnable openedSettings;
+    private Runnable onPasscodeSuccess;
+
+    public PasscodeActivity setOnPasscodeSuccess(Runnable onPasscodeSuccess) {
+        this.onPasscodeSuccess = onPasscodeSuccess;
+        return this;
+    }
+
     public void setOnOpenedSettings(Runnable openedSettings) {
         this.openedSettings = openedSettings;
     }

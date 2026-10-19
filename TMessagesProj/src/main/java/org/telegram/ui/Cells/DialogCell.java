@@ -72,6 +72,7 @@ import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
+import org.telegram.messenger.HiddenChatsController;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
@@ -817,7 +818,7 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 return true;
             }
         }
-        if (user.status != null && user.status.expires > ConnectionsManager.getInstance(currentAccount).getCurrentTime()) {
+        if (user.status != null && (user.status instanceof TLRPC.TL_userStatusOnline || user.status.expires > ConnectionsManager.getInstance(currentAccount).getCurrentTime())) {
             return true;
         }
         return false;
@@ -1101,14 +1102,20 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
     private CharSequence formatArchivedDialogNames() {
         final MessagesController messagesController = MessagesController.getInstance(currentAccount);
         ArrayList<TLRPC.Dialog> dialogs = messagesController.getDialogs(currentDialogFolderId);
-        currentDialogFolderDialogsCount = dialogs.size();
+        final HiddenChatsController hiddenChatsController = HiddenChatsController.getInstance(currentAccount);
+        currentDialogFolderDialogsCount = 0;
+        int visibleUnread = 0;
         SpannableStringBuilder builder = new SpannableStringBuilder();
         for (int a = 0, N = dialogs.size(); a < N; a++) {
             TLRPC.Dialog dialog = dialogs.get(a);
             TLRPC.User currentUser = null;
             TLRPC.Chat currentChat = null;
-            if (messagesController.isHiddenByUndo(dialog.id)) {
+            if (messagesController.isHiddenByUndo(dialog.id) || hiddenChatsController.isChatHidden(dialog.id)) {
                 continue;
+            }
+            currentDialogFolderDialogsCount++;
+            if (messagesController.getDialogUnreadCount(dialog) > 0 || dialog.unread_mark) {
+                visibleUnread++;
             }
             if (DialogObject.isEncryptedDialog(dialog.id)) {
                 TLRPC.EncryptedChat encryptedChat = messagesController.getEncryptedChat(DialogObject.getEncryptedChatId(dialog.id));
@@ -1154,6 +1161,11 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 builder.append(", ");
             }
             builder.append(LocaleController.formatPluralString("Stories", totalCount));
+        }
+        if (currentDialogFolderDialogsCount == 0) {
+            unreadCount = 0;
+        } else if (messagesController.isDialogsEndReached(currentDialogFolderId)) {
+            unreadCount = visibleUnread;
         }
         return Emoji.replaceEmoji(builder, Theme.dialogs_messagePaint[paintIndex].getFontMetricsInt(), false);
     }
@@ -2096,6 +2108,9 @@ public class DialogCell extends BaseCell implements StoriesListPlaceProvider.Ava
                 drawError = false;
             } else {
                 if (currentDialogFolderId != 0) {
+                    if (currentDialogFolderDialogsCount == 0) {
+                        unreadCount = 0;
+                    }
                     if (unreadCount + mentionCount > 0) {
                         if (unreadCount > mentionCount) {
                             drawCount = true;

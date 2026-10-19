@@ -248,6 +248,59 @@ public class MessagesController extends BaseController implements NotificationCe
 
     private boolean dialogsInTransaction;
 
+    private final HashSet<Integer> userDeletedMessages = new HashSet<>();
+
+    public void markAsUserDeleted(int mid) {
+        synchronized (userDeletedMessages) {
+            userDeletedMessages.add(mid);
+        }
+    }
+
+    public void markAsUserDeleted(ArrayList<Integer> mids) {
+        if (mids == null) return;
+        synchronized (userDeletedMessages) {
+            userDeletedMessages.addAll(mids);
+        }
+    }
+
+    public boolean isUserDeletedMessage(int mid) {
+        synchronized (userDeletedMessages) {
+            return userDeletedMessages.contains(mid);
+        }
+    }
+
+    public void removeUserDeletedMessage(int mid) {
+        synchronized (userDeletedMessages) {
+            userDeletedMessages.remove(mid);
+        }
+    }
+
+    public static boolean isSelfDestructingMessage(TLRPC.Message message) {
+        if (message == null) {
+            return false;
+        }
+        if (message instanceof TLRPC.TL_message_secret) {
+            return true;
+        }
+        if (message.ttl > 0) {
+            return true;
+        }
+        if (message.media != null && message.media.ttl_seconds != 0) {
+            return true;
+        }
+        return false;
+    }
+
+    public static boolean isSelfDestructingMessage(MessageObject obj) {
+        if (obj == null) {
+            return false;
+        }
+        if (obj.needDrawBluredPreview() || obj.isVoiceOnce() || obj.isRoundOnce() || obj.isSecretMedia()) {
+            return true;
+        }
+        return isSelfDestructingMessage(obj.messageOwner);
+    }
+
     private LongSparseArray<Boolean> loadingPeerSettings = new LongSparseArray<>();
 
     private ArrayList<Long> createdDialogIds = new ArrayList<>();
@@ -1305,13 +1358,20 @@ public class MessagesController extends BaseController implements NotificationCe
         }
 
         public boolean includesDialog(AccountInstance accountInstance, long dialogId, TLRPC.Dialog d) {
+            return includesDialog(accountInstance, dialogId, d, false);
+        }
+
+        public boolean includesDialog(AccountInstance accountInstance, long dialogId, TLRPC.Dialog d, boolean allowHidden) {
+            if (!allowHidden && accountInstance != null && HiddenChatsController.getInstance(accountInstance.getCurrentAccount()).isChatHidden(dialogId)) {
+                return false;
+            }
             if (neverShow.contains(dialogId)) {
                 return false;
             }
             if (alwaysShow.contains(dialogId)) {
                 return true;
             }
-            if (d.folder_id != 0 && (flags & DIALOG_FILTER_FLAG_EXCLUDE_ARCHIVED) != 0) {
+            if (!allowHidden && d.folder_id != 0 && (flags & DIALOG_FILTER_FLAG_EXCLUDE_ARCHIVED) != 0) {
                 return false;
             }
             MessagesController messagesController = accountInstance.getMessagesController();
@@ -6455,6 +6515,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public void cleanup() {
+        LocalRepeatController.getInstance(currentAccount).cleanup();
         getContactsController().cleanup();
         MediaController.getInstance().cleanup();
         getNotificationsController().cleanup();
@@ -8289,13 +8350,13 @@ public class MessagesController extends BaseController implements NotificationCe
             LongSparseArray<ArrayList<Integer>> task = currentDeletingTaskMids != null ? currentDeletingTaskMids.clone() : null;
             LongSparseArray<ArrayList<Integer>> taskMedia = currentDeletingTaskMediaMids != null ? currentDeletingTaskMediaMids.clone() : null;
             AndroidUtilities.runOnUIThread(() -> {
-                if (task != null) {
+                if (task != null && !SharedConfig.keepSelfDestructingMedia) {
                     for (int a = 0, N = task.size(); a < N; a++) {
                         ArrayList<Integer> mids = task.valueAt(a);
                         deleteMessages(mids, null, null, task.keyAt(a), 0, true, 0, !mids.isEmpty() && mids.get(0) > 0);
                     }
                 }
-                if (taskMedia != null) {
+                if (taskMedia != null && !SharedConfig.keepSelfDestructingMedia) {
                     final boolean checkViewer = SecretMediaViewer.hasInstance() && SecretMediaViewer.getInstance().isVisible();
                     final MessageObject viewerObject = checkViewer ? SecretMediaViewer.getInstance().getCurrentMessageObject() : null;
                     for (int a = 0, N = taskMedia.size(); a < N; a++) {
@@ -9295,7 +9356,11 @@ public class MessagesController extends BaseController implements NotificationCe
                     for (int a = 0; a < messages.size(); a++) {
                         Integer id = messages.get(a);
                         if (obj.getId() == id) {
-                            obj.deleted = true;
+                            if (SharedConfig.keepSelfDestructingMedia && isSelfDestructingMessage(obj)) {
+                                obj.wasDeleted = true;
+                            } else {
+                                obj.deleted = true;
+                            }
                             break;
                         }
                     }
@@ -9322,6 +9387,9 @@ public class MessagesController extends BaseController implements NotificationCe
         final boolean welcomeMessages = mode == ChatActivity.MODE_WELCOME_MESSAGES;
         if ((messages == null || messages.isEmpty()) && taskId == 0) {
             return;
+        }
+        if (messages != null) {
+            markAsUserDeleted(messages);
         }
         ArrayList<Integer> toSend = null;
         long channelId;
@@ -9356,7 +9424,11 @@ public class MessagesController extends BaseController implements NotificationCe
                         Integer id = messages.get(a);
                         MessageObject obj = dialogMessagesByIds.get(id);
                         if (obj != null) {
-                            obj.deleted = true;
+                            if (SharedConfig.keepSelfDestructingMedia && isSelfDestructingMessage(obj)) {
+                                obj.wasDeleted = true;
+                            } else {
+                                obj.deleted = true;
+                            }
                         }
                     }
                 } else {
@@ -9499,7 +9571,7 @@ public class MessagesController extends BaseController implements NotificationCe
             }
 
             getConnectionsManager().sendRequest(req, (response, error) -> {
-                if (error == null) {
+                if (response instanceof TLRPC.TL_messages_affectedMessages) {
                     TLRPC.TL_messages_affectedMessages res = (TLRPC.TL_messages_affectedMessages) response;
                     processNewDifferenceParams(-1, res.pts, -1, res.pts_count);
                 }
@@ -9795,6 +9867,9 @@ public class MessagesController extends BaseController implements NotificationCe
 
         for (int a = 0, N = dialogs.size(); a < N; a++) {
             TLRPC.Dialog dialog = dialogs.get(a);
+            if (dialog == null || HiddenChatsController.getInstance(currentAccount).isChatHidden(dialog.id)) {
+                continue;
+            }
 
             if (dialog.id < 0) {
                 final TLRPC.Chat chat = getChat(-dialog.id);
@@ -10524,7 +10599,31 @@ public class MessagesController extends BaseController implements NotificationCe
         checkReadTasks();
 
         if (getUserConfig().isClientActivated()) {
-            if (!ignoreSetOnline && getConnectionsManager().getPauseTime() == 0 && ApplicationLoader.isScreenOn && !ApplicationLoader.mainInterfacePausedStageQueue) {
+            LocalRepeatController.getInstance(currentAccount).tick();
+            if (ApplicationLoader.isScreenOn && !ApplicationLoader.mainInterfacePausedStageQueue) {
+                getContactsController().reloadContactsStatusesMaybe(false);
+            }
+            if (GhostModeController.getInstance(currentAccount).isOnlineHidden()) {
+                if (statusSettingState != 2 && !offlineSent) {
+                    statusSettingState = 2;
+                    if (statusRequest != 0) {
+                        getConnectionsManager().cancelRequest(statusRequest, true);
+                    }
+                    TL_account.updateStatus req = new TL_account.updateStatus();
+                    req.offline = true;
+                    statusRequest = getConnectionsManager().sendRequest(req, (response, error) -> {
+                        if (error == null) {
+                            offlineSent = true;
+                            statusSettingState = 0;
+                        } else {
+                            if (lastStatusUpdateTime != 0) {
+                                lastStatusUpdateTime += 5000;
+                            }
+                        }
+                        statusRequest = 0;
+                    });
+                }
+            } else if (!ignoreSetOnline && getConnectionsManager().getPauseTime() == 0 && ApplicationLoader.isScreenOn && !ApplicationLoader.mainInterfacePausedStageQueue) {
                 if (ApplicationLoader.mainInterfacePausedStageQueueTime != 0 && Math.abs(ApplicationLoader.mainInterfacePausedStageQueueTime - System.currentTimeMillis()) > 1000) {
                     if (statusSettingState != 1 && (lastStatusUpdateTime == 0 || Math.abs(System.currentTimeMillis() - lastStatusUpdateTime) >= 55000 || offlineSent)) {
                         statusSettingState = 1;
@@ -10829,6 +10928,20 @@ public class MessagesController extends BaseController implements NotificationCe
         getLocationController().update();
         checkPromoInfoInternal(false);
         checkTosUpdate();
+    }
+
+    public void sendOfflineStatus() {
+        if (!getUserConfig().isClientActivated()) {
+            return;
+        }
+        TL_account.updateStatus req = new TL_account.updateStatus();
+        req.offline = true;
+        getConnectionsManager().sendRequest(req, (response, error) -> {
+            if (error == null) {
+                offlineSent = true;
+                statusSettingState = 0;
+            }
+        });
     }
 
     private void checkTosUpdate() {
@@ -11383,6 +11496,9 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public boolean sendTyping(long dialogId, long threadMsgId, int action, String emojicon, int classGuid) {
+        if (GhostModeController.getInstance(currentAccount).isTypingHidden()) {
+            return false;
+        }
         if (action < 0 || action >= sendingTypings.length || dialogId == 0) {
             return false;
         }
@@ -14422,7 +14538,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 TLRPC.TL_messages_readMessageContents req = new TLRPC.TL_messages_readMessageContents();
                 req.id.add(messageObject.getId());
                 getConnectionsManager().sendRequest(req, (response, error) -> {
-                    if (error == null) {
+                    if (response instanceof TLRPC.TL_messages_affectedMessages) {
                         TLRPC.TL_messages_affectedMessages res = (TLRPC.TL_messages_affectedMessages) response;
                         processNewDifferenceParams(-1, res.pts, -1, res.pts_count);
                     }
@@ -14447,7 +14563,7 @@ public class MessagesController extends BaseController implements NotificationCe
             TLRPC.TL_messages_readMessageContents req = new TLRPC.TL_messages_readMessageContents();
             req.id.add(mid);
             getConnectionsManager().sendRequest(req, (response, error) -> {
-                if (error == null) {
+                if (response instanceof TLRPC.TL_messages_affectedMessages) {
                     TLRPC.TL_messages_affectedMessages res = (TLRPC.TL_messages_affectedMessages) response;
                     processNewDifferenceParams(-1, res.pts, -1, res.pts_count);
                 }
@@ -14470,6 +14586,9 @@ public class MessagesController extends BaseController implements NotificationCe
 
     public void doDeleteShowOnceTask(long taskId, long dialogId, int mid) {
         getMessagesStorage().removePendingTask(taskId);
+        if (SharedConfig.keepSelfDestructingMedia) {
+            return;
+        }
         ArrayList<Integer> mids = new ArrayList<>();
         mids.add(mid);
         getMessagesStorage().emptyMessagesMedia(dialogId, mids);
@@ -14509,7 +14628,7 @@ public class MessagesController extends BaseController implements NotificationCe
             newTaskId = taskId;
         }
         int time = getConnectionsManager().getCurrentTime();
-        if (createDeleteTask) {
+        if (createDeleteTask && !SharedConfig.keepSelfDestructingMedia) {
             getMessagesStorage().createTaskForMid(dialogId, mid, time, time, ttl, false);
         }
         if (inputChannel != null) {
@@ -14525,7 +14644,7 @@ public class MessagesController extends BaseController implements NotificationCe
             TLRPC.TL_messages_readMessageContents req = new TLRPC.TL_messages_readMessageContents();
             req.id.add(mid);
             getConnectionsManager().sendRequest(req, (response, error) -> {
-                if (error == null) {
+                if (response instanceof TLRPC.TL_messages_affectedMessages) {
                     TLRPC.TL_messages_affectedMessages res = (TLRPC.TL_messages_affectedMessages) response;
                     processNewDifferenceParams(-1, res.pts, -1, res.pts_count);
                 }
@@ -14550,7 +14669,7 @@ public class MessagesController extends BaseController implements NotificationCe
         ArrayList<Long> randomIds = new ArrayList<>();
         randomIds.add(randomId);
         getSecretChatHelper().sendMessagesReadMessage(chat, randomIds, null);
-        if (ttl > 0) {
+        if (ttl > 0 && !SharedConfig.keepSelfDestructingMedia) {
             int time = getConnectionsManager().getCurrentTime();
             getMessagesStorage().createTaskForSecretChat(chat.id, time, time, 0, randomIds);
         }
@@ -17604,7 +17723,12 @@ public class MessagesController extends BaseController implements NotificationCe
                         Integer id = ids.get(b);
                         MessageObject obj = dialogMessagesByIds.get(id);
                         if (obj != null) {
-                            obj.deleted = true;
+                            boolean keepSelfDestruct = SharedConfig.keepSelfDestructingMedia && isSelfDestructingMessage(obj);
+                            if (keepSelfDestruct || (SharedConfig.saveDeletedMessages && !isUserDeletedMessage(id))) {
+                                obj.wasDeleted = true;
+                            } else {
+                                obj.deleted = true;
+                            }
                         }
                     }
                 } else {
@@ -17614,7 +17738,12 @@ public class MessagesController extends BaseController implements NotificationCe
                             MessageObject obj = objs.get(i);
                             for (int b = 0, size2 = ids.size(); b < size2; b++) {
                                 if (obj.getId() == ids.get(b)) {
-                                    obj.deleted = true;
+                                    boolean keepSelfDestruct = SharedConfig.keepSelfDestructingMedia && isSelfDestructingMessage(obj);
+                                    if (keepSelfDestruct || (SharedConfig.saveDeletedMessages && !isUserDeletedMessage(obj.getId()))) {
+                                        obj.wasDeleted = true;
+                                    } else {
+                                        obj.deleted = true;
+                                    }
                                     break;
                                 }
                             }
@@ -19488,6 +19617,9 @@ public class MessagesController extends BaseController implements NotificationCe
                 }
 
                 ImageLoader.saveMessageThumbs(message);
+                if (SharedConfig.saveEditHistory) {
+                    getMessagesStorage().saveMessageEdit(message.dialog_id, message);
+                }
                 AndroidUtilities.runOnUIThread(()-> getSendMessagesHelper().onMessageEdited(message));
 
                 boolean isDialogCreated = createdDialogIds.contains(message.dialog_id);
@@ -21103,7 +21235,12 @@ public class MessagesController extends BaseController implements NotificationCe
                                 if (BuildVars.LOGS_ENABLED) {
                                     FileLog.d("mark messages " + obj.getId() + " deleted");
                                 }
-                                obj.deleted = true;
+                                boolean keepSelfDestruct = SharedConfig.keepSelfDestructingMedia && isSelfDestructingMessage(obj);
+                                if (keepSelfDestruct || (SharedConfig.saveDeletedMessages && !isUserDeletedMessage(id))) {
+                                    obj.wasDeleted = true;
+                                } else {
+                                    obj.deleted = true;
+                                }
                             }
                         }
                     } else {
@@ -21114,7 +21251,12 @@ public class MessagesController extends BaseController implements NotificationCe
                                 if (obj != null) {
                                     for (int b = 0, size2 = arrayList.size(); b < size2; b++) {
                                         if (obj.getId() == arrayList.get(b)) {
-                                            obj.deleted = true;
+                                            boolean keepSelfDestruct = SharedConfig.keepSelfDestructingMedia && isSelfDestructingMessage(obj);
+                                            if (keepSelfDestruct || (SharedConfig.saveDeletedMessages && !isUserDeletedMessage(obj.getId()))) {
+                                                obj.wasDeleted = true;
+                                            } else {
+                                                obj.deleted = true;
+                                            }
                                             break;
                                         }
                                     }
@@ -21610,101 +21752,6 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public SponsoredMessagesInfo getSponsoredMessages(long dialogId) {
-        SponsoredMessagesInfo info = sponsoredMessages.get(dialogId);
-        if (info != null && (info.loading || Math.abs(SystemClock.elapsedRealtime() - info.loadTime) <= 5 * 60 * 1000)) {
-            return info;
-        }
-        if (dialogId < 0 ? !ChatObject.isChannel(getChat(-dialogId)) : !UserObject.isBot(getUser(dialogId))) {
-            return null;
-        }
-        info = new SponsoredMessagesInfo();
-        info.loading = true;
-        sponsoredMessages.put(dialogId, info);
-        SponsoredMessagesInfo infoFinal = info;
-        TLRPC.TL_messages_getSponsoredMessages req = new TLRPC.TL_messages_getSponsoredMessages();
-        req.peer = getInputPeer(dialogId);
-        getConnectionsManager().sendRequest(req, (response, error) -> {
-            ArrayList<MessageObject> result;
-            Integer posts_between;
-            if (response instanceof TLRPC.messages_SponsoredMessages) {
-                TLRPC.messages_SponsoredMessages res = (TLRPC.messages_SponsoredMessages) response;
-                if (res.messages.isEmpty()) {
-                    result = null;
-                    posts_between = null;
-                } else {
-                    if (res instanceof TLRPC.TL_messages_sponsoredMessages && (res.flags & 0x1) > 0) {
-                        posts_between = res.posts_between;
-                    } else {
-                        posts_between = null;
-                    }
-                    result = new ArrayList<>();
-                    AndroidUtilities.runOnUIThread(() -> {
-                        putUsers(res.users, false);
-                        putChats(res.chats, false);
-                    });
-                    final LongSparseArray<TLRPC.User> usersDict = new LongSparseArray<>();
-                    final LongSparseArray<TLRPC.Chat> chatsDict = new LongSparseArray<>();
-
-                    for (int a = 0; a < res.users.size(); a++) {
-                        TLRPC.User u = res.users.get(a);
-                        usersDict.put(u.id, u);
-                    }
-                    for (int a = 0; a < res.chats.size(); a++) {
-                        TLRPC.Chat c = res.chats.get(a);
-                        chatsDict.put(c.id, c);
-                    }
-
-                    int messageId = -10000000;
-                    for (int a = 0, N = res.messages.size(); a < N; a++) {
-                        TLRPC.TL_sponsoredMessage sponsoredMessage = res.messages.get(a);
-                        TLRPC.TL_message message = new TLRPC.TL_message();
-                        if (!sponsoredMessage.entities.isEmpty()) {
-                            message.entities = sponsoredMessage.entities;
-                            message.flags |= 128;
-                        }
-                        message.peer_id = getPeer(dialogId);
-                        message.flags |= 256;
-                        message.date = getConnectionsManager().getCurrentTime();
-                        message.id = messageId--;
-                        message.message = sponsoredMessage.message;
-                        if (sponsoredMessage.media != null) {
-                            message.flags |= 512;
-                        }
-                        message.media = sponsoredMessage.media;
-                        MessageObject messageObject = new MessageObject(currentAccount, message, usersDict, chatsDict, true, true);
-                        messageObject.sponsoredId = sponsoredMessage.random_id;
-                        messageObject.sponsoredTitle = sponsoredMessage.title;
-                        messageObject.sponsoredUrl = sponsoredMessage.url;
-                        messageObject.sponsoredRecommended = sponsoredMessage.recommended;
-                        messageObject.sponsoredPhoto = sponsoredMessage.photo;
-                        messageObject.sponsoredInfo = sponsoredMessage.sponsor_info;
-                        messageObject.sponsoredAdditionalInfo = sponsoredMessage.additional_info;
-                        messageObject.sponsoredButtonText = sponsoredMessage.button_text;
-                        messageObject.sponsoredCanReport = sponsoredMessage.can_report;
-                        messageObject.sponsoredColor = sponsoredMessage.color;
-                        messageObject.sponsoredMedia = sponsoredMessage.media;
-                        messageObject.setType();
-                        messageObject.textLayoutBlocks = new ArrayList<>();
-                        messageObject.generateThumbs(true);
-                        result.add(messageObject);
-                    }
-                }
-            } else {
-                result = null;
-                posts_between = null;
-            }
-            AndroidUtilities.runOnUIThread(() -> {
-                if (result == null) {
-                    sponsoredMessages.remove(dialogId);
-                } else {
-                    infoFinal.loadTime = SystemClock.elapsedRealtime();
-                    infoFinal.loading = false;
-                    infoFinal.messages = result;
-                    infoFinal.posts_between = posts_between;
-                    getNotificationCenter().postNotificationName(NotificationCenter.didLoadSponsoredMessages, dialogId, result);
-                }
-            });
-        });
         return null;
     }
 
@@ -22570,7 +22617,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public String getRestrictionReason(ArrayList<TLRPC.RestrictionReason> reasons) {
-        if (reasons.isEmpty()) {
+        if (SharedConfig.ignoreAllRestrictions || reasons == null || reasons.isEmpty()) {
             return null;
         }
         for (int a = 0, N = reasons.size(); a < N; a++) {
@@ -23102,6 +23149,7 @@ public class MessagesController extends BaseController implements NotificationCe
                 processNewDifferenceParams(-1, res.pts, -1, res.pts_count);
                 getMessagesStorage().getStorageQueue().postRunnable(() -> {
                     ArrayList<Integer> dbMessages = getMessagesStorage().getCachedMessagesInRange(dialogId, minDate, maxDate);
+                    markAsUserDeleted(dbMessages);
                     getMessagesStorage().markMessagesAsDeleted(dialogId, dbMessages, false, true, 0, 0);
                     getMessagesStorage().updateDialogsWithDeletedMessages(dialogId, 0, dbMessages, null);
                     AndroidUtilities.runOnUIThread(() -> {
@@ -24310,9 +24358,7 @@ public class MessagesController extends BaseController implements NotificationCe
     }
 
     public boolean isSponsoredDisabled() {
-        TLRPC.UserFull userFull = getUserFull(getUserConfig().getClientUserId());
-        if (userFull == null) return false;
-        return !userFull.sponsored_enabled;
+        return true;
     }
 
     private boolean loadingAvailableEffects;

@@ -2851,9 +2851,13 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     } else {
                         if (todoLayout == null) {
                             layouts[1] = todoLayout = new ChatAttachAlertPollLayout(this, getContext(), true, resourcesProvider, null);
-                            todoLayout.setDelegate((poll, caption, media, params, notify, scheduleDate, payStars) ->
-                                ((ChatActivity) baseFragment).sendTodo((TLRPC.TL_messageMediaToDo) poll, notify, scheduleDate, payStars)
-                            );
+                            todoLayout.setDelegate((poll, caption, media, params, notify, scheduleDate, payStars) -> {
+                                if (UserConfig.getInstance(currentAccount).isPremium()) {
+                                    ((ChatActivity) baseFragment).sendTodo((TLRPC.TL_messageMediaToDo) poll, notify, scheduleDate, payStars);
+                                } else {
+                                    ((ChatActivity) baseFragment).sendAlternativeTodo((TLRPC.TL_messageMediaToDo) poll, notify, scheduleDate, payStars);
+                                }
+                            });
                         }
                         showLayout(todoLayout);
                     }
@@ -4568,10 +4572,6 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
         }
         if (currentAttachLayout == layout) {
             currentAttachLayout.scrollToTop();
-            return;
-        }
-        if (layout == todoLayout && !UserConfig.getInstance(currentAccount).isPremium()) {
-            new PremiumFeatureBottomSheet(baseFragment, PremiumPreviewFragment.PREMIUM_FEATURE_TODO, false).show();
             return;
         }
 
@@ -6597,7 +6597,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     } else if (position == todoButton) {
                         attachButton.setTextAndIcon(12, getString(R.string.Todo), GlassTabView.TabAnimation.CHECKLIST);
                         attachButton.setTag(12);
-                        needPremium = true;
+                        needPremium = false;
                     } else if (position == stickerButton) {
                         attachButton.setTextAndIcon(LAYOUT_TYPE_STICKERS, getString(R.string.ChatSticker), GlassTabView.TabAnimation.STICKER);
                         attachButton.setTag(LAYOUT_TYPE_STICKERS);
@@ -6610,7 +6610,7 @@ public class ChatAttachAlert extends BottomSheet implements NotificationCenter.N
                     } else if (position == richButton) {
                         attachButton.setTextAndIcon(LAYOUT_TYPE_RICH, getString(R.string.AttachArticle), GlassTabView.TabAnimation.ARTICLE);
                         attachButton.setTag(LAYOUT_TYPE_RICH);
-                        needPremium = !MessagesController.getInstance(currentAccount).storyEntitiesAllowed();
+                        needPremium = false;
                     }
                     attachButton.glassTabView.setCounter(err ? "!" : null, err, false);
                     attachButton.glassTabView.setPremiumBadge(needPremium && !UserConfig.getInstance(currentAccount).isPremium());

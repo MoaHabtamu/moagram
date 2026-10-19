@@ -1087,7 +1087,7 @@ public class FileLoader extends BaseController {
     public static boolean canSaveAsFile(Object parentObject) {
         if (parentObject instanceof MessageObject) {
             MessageObject messageObject = (MessageObject) parentObject;
-            if (!messageObject.isDocument() || messageObject.isRoundVideo() || messageObject.isVoice()) {
+            if (!messageObject.isDocument() || ((messageObject.isRoundVideo() || messageObject.isVoice()) && !SharedConfig.allowSaveRestrictedMedia)) {
                 return false;
             }
             return true;
@@ -1104,12 +1104,12 @@ public class FileLoader extends BaseController {
         if (metadata != null) {
             int flag;
             long dialogId = metadata.dialogId;
-            if (getMessagesController().isPeerNoForwards(dialogId) || DialogObject.isEncryptedDialog(dialogId)) {
+            if (!SharedConfig.allowSaveRestrictedMedia && (getMessagesController().isPeerNoForwards(dialogId) || DialogObject.isEncryptedDialog(dialogId))) {
                 return false;
             }
             if (parentObject instanceof MessageObject) {
                 messageObject = (MessageObject) parentObject;
-                if (messageObject.isRoundVideo() || messageObject.isVoice() || messageObject.isAnyKindOfSticker() || messageObject.messageOwner.noforwards) {
+                if (messageObject.isRoundVideo() || messageObject.isVoice() || messageObject.isAnyKindOfSticker() || (!SharedConfig.allowSaveRestrictedMedia && messageObject.messageOwner.noforwards)) {
                     return false;
                 }
             } else {

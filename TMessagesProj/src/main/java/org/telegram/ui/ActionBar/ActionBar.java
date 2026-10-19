@@ -140,6 +140,7 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
     private Runnable lastRunnable;
     private boolean titleOverlayShown;
     private Runnable titleActionRunnable;
+    private Runnable titleLongActionRunnable;
     private boolean castShadows = true;
     private int shadowAlpha = 0xFF;
 
@@ -190,6 +191,16 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
             if (titleActionRunnable != null) {
                 titleActionRunnable.run();
             }
+        });
+        setOnLongClickListener(v -> {
+            if (isSearchFieldVisible() || actionMode != null && actionMode.isShown()) {
+                return false;
+            }
+            if (titleLongActionRunnable != null) {
+                titleLongActionRunnable.run();
+                return true;
+            }
+            return false;
         });
     }
 
@@ -1645,6 +1656,10 @@ public class ActionBar extends FrameLayout implements FactorAnimator.Target, The
 
     public void setTitleActionRunnable(Runnable action) {
         lastRunnable = titleActionRunnable = action;
+    }
+
+    public void setTitleLongActionRunnable(Runnable action) {
+        titleLongActionRunnable = action;
     }
 
     boolean overlayTitleAnimationInProgress;

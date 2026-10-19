@@ -150,12 +150,12 @@ public class FileLoadOperation {
     private final static int stateCanceled = 4;
     private final static int stateCancelling = 5;
 
-    private int downloadChunkSize = 1024 * 32;
-    private int downloadChunkSizeBig = 1024 * 128;
+    private int downloadChunkSize = 1024 * 128;
+    private int downloadChunkSizeBig = 1024 * 1024;
     private int cdnChunkCheckSize = 1024 * 128;
-    private int maxDownloadRequests = 4;
-    private int maxDownloadRequestsBig = 4;
-    private int bigFileSizeFrom = 10 * 1024 * 1024;
+    private int maxDownloadRequests = 8;
+    private int maxDownloadRequestsBig = 12;
+    private int bigFileSizeFrom = 1024 * 1024;
     private int maxCdnParts = (int) (FileLoader.DEFAULT_MAX_FILE_SIZE / downloadChunkSizeBig);
 
     //load small parts for stream
@@ -286,10 +286,10 @@ public class FileLoadOperation {
     }
 
     private void updateParams() {
-        if ((preloadPrefixSize > 0 || MessagesController.getInstance(currentAccount).getfileExperimentalParams) && !forceSmallChunk) {
-            downloadChunkSizeBig = 1024 * 512;
+        if (!forceSmallChunk) {
+            downloadChunkSizeBig = 1024 * 1024;
             maxDownloadRequests = 8;
-            maxDownloadRequestsBig = 8;
+            maxDownloadRequestsBig = 12;
         } else {
             downloadChunkSizeBig = 1024 * 128;
             maxDownloadRequests = 4;
@@ -1441,7 +1441,7 @@ public class FileLoadOperation {
             }
             for (int i = 0; i < 2; i++) {
                 int connectionType = i == 0 ? ConnectionsManager.ConnectionTypeDownload : ConnectionsManager.ConnectionTypeDownload2;
-                if (waitingDownloadSize[i] > 1024 * 1024)  {
+                if (waitingDownloadSize[i] > Math.max(1024 * 1024 * 4, currentDownloadChunkSize * 2))  {
                     int datacenterId = isCdn ? cdnDatacenterId : this.datacenterId;
                     ConnectionsManager.getInstance(currentAccount).discardConnection(datacenterId, connectionType);
                 }

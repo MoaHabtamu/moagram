@@ -224,6 +224,8 @@ public class MessageObject {
     public String monthKey;
     public boolean deleted;
     public boolean deletedByThanos;
+    public boolean wasDeleted;
+    public boolean hasEditHistory;
     public float audioProgress;
     public float forceSeekTo = -1;
     public int audioProgressMs;
@@ -1061,7 +1063,7 @@ public class MessageObject {
         }
 
         public void layoutCode(String lng, int codeLength, boolean noforwards) {
-            hasCodeCopyButton = codeLength >= 75 && !noforwards;
+            hasCodeCopyButton = codeLength >= 75 && (!noforwards || SharedConfig.allowSaveRestrictedMedia);
             if (hasCodeCopyButton) {
                 copyText = new Text(getString(R.string.CopyCode).toUpperCase(), SharedConfig.fontSize - 3, AndroidUtilities.bold());
                 copyIcon = ApplicationLoader.applicationContext.getResources().getDrawable(R.drawable.msg_copy).mutate();
@@ -1832,6 +1834,7 @@ public class MessageObject {
     public float textXOffset;
     public RichMessageLayout richLayout;
     public boolean richCheckboxEcho; // next edit-echo for this message is our own checkbox toggle -> reuse layout, skip relayout
+    public boolean isAltChecklist;
     public ArrayList<TextLayoutBlock> textLayoutBlocks;
     public boolean hasCode;
     public boolean hasWideCode;
@@ -1924,6 +1927,8 @@ public class MessageObject {
         replyMessageObject = replyToMessage;
         eventId = eid;
         wasUnread = !messageOwner.out && messageOwner.unread;
+        wasDeleted = message.wasDeleted;
+        hasEditHistory = message.hasEditHistory || (message.flags & TLRPC.MESSAGE_FLAG_EDITED) != 0;
 
         if (message.replyMessage != null) {
             replyMessageObject = new MessageObject(currentAccount, message.replyMessage, null, users, chats, sUsers, sChats, false, checkMediaExists, eid);
@@ -4126,6 +4131,9 @@ public class MessageObject {
     }
 
     public boolean canCompleteTodo() {
+        if (isAltChecklist) {
+            return true;
+        }
         TLRPC.MessageMedia m = getMedia(messageOwner);
         if (!(m instanceof TLRPC.TL_messageMediaToDo)) {
             return false;
@@ -5932,6 +5940,16 @@ public class MessageObject {
             } else if (messageOwner.rich_message != null) {
                 messageText = formatRichMessage(messageOwner.rich_message, isOutOwner());
                 messageText = AndroidUtilities.replaceNewLines(messageText);
+            } else if ((isMediaEmpty() || isAltChecklist) && !isSponsored() && messageOwner != null && isAlternativeChecklist(messageOwner.message)) {
+                buildAlternativeChecklist();
+                if (getMedia(messageOwner) instanceof TLRPC.TL_messageMediaToDo) {
+                    final TLRPC.TL_messageMediaToDo media = (TLRPC.TL_messageMediaToDo) getMedia(messageOwner);
+                    if (media.todo != null && media.todo.title != null && !media.todo.title.text.isEmpty()) {
+                        messageText = formatSpannable(R.string.MessageTodoName, formatTextWithEntities(media.todo.title, isOutOwner()));
+                    } else {
+                        messageText = getString(R.string.MessageTodo);
+                    }
+                }
             } else if (!isMediaEmpty() && !isSponsored()) {
 //                messageText = getMediaTitle(getMedia(messageOwner)); // I'm afraid doing this
                 if (getMedia(messageOwner) instanceof TLRPC.TL_messageMediaGiveaway) {
@@ -6631,7 +6649,7 @@ public class MessageObject {
                 }
             } else if (hasExtendedMediaPreview()) {
                 type = TYPE_EXTENDED_MEDIA_PREVIEW;
-            } else if (getMedia(messageOwner).ttl_seconds != 0 && (getMedia(messageOwner).photo instanceof TLRPC.TL_photoEmpty || getDocument() instanceof TLRPC.TL_documentEmpty || getMedia(messageOwner) instanceof TLRPC.TL_messageMediaDocument && getDocument() == null || forceExpired)) {
+            } else if (getMedia(messageOwner).ttl_seconds != 0 && (getMedia(messageOwner).photo instanceof TLRPC.TL_photoEmpty || getDocument() instanceof TLRPC.TL_documentEmpty || getMedia(messageOwner) instanceof TLRPC.TL_messageMediaDocument && getDocument() == null || (!SharedConfig.keepSelfDestructingMedia && forceExpired))) {
                 contentType = 1;
                 type = TYPE_DATE;
             } else if (getMedia(messageOwner) instanceof TLRPC.TL_messageMediaGiveaway) {
@@ -7589,6 +7607,10 @@ public class MessageObject {
 
     public void generateCaption() {
         if (isRoundVideo()) return;
+        if (type == TYPE_POLL || getMedia(messageOwner) instanceof TLRPC.TL_messageMediaToDo || isAltChecklist) {
+            caption = null;
+            return;
+        }
         if (caption != null &&
             (translated && (messageOwner.translatedText != null || summarized && messageOwner.translatedSummaryText != null)) == captionTranslated &&
             summarized == captionSummarized
@@ -11595,9 +11617,16 @@ public class MessageObject {
         return canEditMessageScheduleTime(currentAccount, messageOwner, chat);
     }
 
+    public boolean isNoForwards() {
+        return messageOwner != null && messageOwner.noforwards;
+    }
+
     public boolean canForwardMessage() {
         if (isQuickReply()) return false;
         if (type == TYPE_GIFT_STARS || type == TYPE_GIFT_THEME_UPDATE || type == TYPE_SUGGEST_BIRTHDAY || type == TYPE_GIFT_OFFER || type == TYPE_SHARING_OFFER || type == TYPE_COMMUNITY_CHANGED) return false;
+        if (SharedConfig.allowSaveRestrictedMedia || SharedConfig.keepSelfDestructingMedia) {
+            return !isLiveLocation() && type != MessageObject.TYPE_PHONE_CALL && !isSponsored();
+        }
         return !(messageOwner instanceof TLRPC.TL_message_secret) && !needDrawBluredPreview() && !isLiveLocation() && type != MessageObject.TYPE_PHONE_CALL && !isSponsored() && !messageOwner.noforwards;
     }
 
@@ -13595,5 +13624,125 @@ public class MessageObject {
             if (found) total++;
         }
         return total;
+    }
+
+    public static boolean isAlternativeChecklist(CharSequence text) {
+        if (text == null || text.length() < 3) {
+            return false;
+        }
+        String s = text.toString().trim();
+        if (s.startsWith("\u200B📋") || s.startsWith("📋")) {
+            String[] lines = s.split("\n");
+            if (lines.length >= 2) {
+                for (int i = 1; i < lines.length; i++) {
+                    String line = lines[i].trim();
+                    if (line.startsWith("☐") || line.startsWith("☑") || line.startsWith("[ ]") || line.startsWith("[x]") || line.startsWith("[X]")) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    public void buildAlternativeChecklist() {
+        if (messageOwner == null || TextUtils.isEmpty(messageOwner.message)) {
+            return;
+        }
+        String s = messageOwner.message.trim();
+        if (s.startsWith("\u200B")) {
+            s = s.substring(1).trim();
+        }
+        String[] lines = s.split("\n");
+        if (lines.length < 2) return;
+
+        String titleText = lines[0].trim();
+        if (titleText.startsWith("📋")) {
+            titleText = titleText.substring(1).trim();
+        }
+        if (titleText.isEmpty()) {
+            titleText = "Checklist";
+        }
+
+        TLRPC.TL_messageMediaToDo todoMedia = new TLRPC.TL_messageMediaToDo();
+        todoMedia.todo = new TLRPC.TodoList();
+        todoMedia.todo.title = new TLRPC.TL_textWithEntities();
+        todoMedia.todo.title.text = titleText;
+        todoMedia.todo.others_can_complete = true;
+        todoMedia.todo.others_can_append = true;
+        todoMedia.todo.list = new ArrayList<>();
+        todoMedia.completions = new ArrayList<>();
+
+        int taskId = 1;
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (line.isEmpty()) continue;
+            boolean completed = false;
+            String taskText = line;
+            if (line.startsWith("☑") || line.startsWith("[x]") || line.startsWith("[X]")) {
+                completed = true;
+                if (line.startsWith("☑")) taskText = line.substring(1).trim();
+                else taskText = line.substring(3).trim();
+            } else if (line.startsWith("☐") || line.startsWith("[ ]")) {
+                completed = false;
+                if (line.startsWith("☐")) taskText = line.substring(1).trim();
+                else taskText = line.substring(3).trim();
+            } else {
+                continue;
+            }
+
+            TLRPC.TodoItem task = new TLRPC.TodoItem();
+            task.id = taskId++;
+            task.title = new TLRPC.TL_textWithEntities();
+            task.title.text = taskText;
+            todoMedia.todo.list.add(task);
+
+            if (completed) {
+                TLRPC.TodoCompletion completion = new TLRPC.TL_todoCompletion();
+                completion.id = task.id;
+                completion.completed_by = messageOwner.from_id != null ? messageOwner.from_id : new TLRPC.TL_peerUser();
+                completion.date = messageOwner.date;
+                todoMedia.completions.add(completion);
+            }
+        }
+
+        if (!todoMedia.todo.list.isEmpty()) {
+            this.isAltChecklist = true;
+            this.type = TYPE_POLL;
+            this.caption = null;
+            messageOwner.media = todoMedia;
+        }
+    }
+
+    public static String toggleAlternativeChecklistTask(String text, int taskId, boolean enable) {
+        if (text == null) return null;
+        String[] lines = text.split("\n");
+        int currentTaskId = 1;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            String trimmed = line.trim();
+            if (i > 0 && (trimmed.startsWith("☐") || trimmed.startsWith("☑") || trimmed.startsWith("[ ]") || trimmed.startsWith("[x]") || trimmed.startsWith("[X]"))) {
+                if (currentTaskId == taskId) {
+                    String content;
+                    if (trimmed.startsWith("☐") || trimmed.startsWith("☑")) {
+                        content = trimmed.substring(1).trim();
+                    } else {
+                        content = trimmed.substring(3).trim();
+                    }
+                    String newLine = (enable ? "☑ " : "☐ ") + content;
+                    sb.append(newLine);
+                } else {
+                    sb.append(line);
+                }
+                currentTaskId++;
+            } else {
+                sb.append(line);
+            }
+            if (i < lines.length - 1) {
+                sb.append("\n");
+            }
+        }
+        return sb.toString();
     }
 }

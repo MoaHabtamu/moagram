@@ -1239,6 +1239,7 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
         if (listViewAdapter != null) {
             listViewAdapter.notifyDataSetChanged();
         }
+        getContactsController().reloadContactsStatusesMaybe(true);
     }
 
     @Override

@@ -718,6 +718,7 @@ public class ProfileActionsView extends View {
                 insertIfAvailable(out, KEY_CALL);
                 insertIfAvailable(out, KEY_VIDEO);
                 insertIfNotAvailable(out, KEY_GIFT, KEY_VIDEO);
+                insertIfAvailable(out, KEY_SHARE);
                 break;
             case MODE_TOPIC:
                 insertIfAvailable(out, KEY_MESSAGE);

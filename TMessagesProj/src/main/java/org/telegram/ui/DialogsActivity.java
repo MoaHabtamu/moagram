@@ -53,12 +53,20 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.Editable;
+import android.text.InputFilter;
+import android.text.InputType;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
+import android.text.TextWatcher;
+import android.text.method.PasswordTransformationMethod;
 import android.text.style.ImageSpan;
+import org.telegram.messenger.HiddenChatsController;
+import org.telegram.ui.Components.BulletinFactory;
+import org.telegram.ui.Components.EditTextBoldCursor;
 import android.util.LongSparseArray;
 import android.util.Property;
 import android.util.StateSet;
@@ -505,6 +513,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     public ActionBarMenuItem searchItem;
     private ActionBarMenuItem optionsItem;
     private ActionBarMenuItem speedItem;
+    private final static int SEARCH_OPTION_PRIVATE_CHATS = 1001;
+    private ActionBarMenuItem searchFilterItem;
+    private ActionBarMenuSubItem privateChatsSubItem;
     public static boolean switchingTheme;
     private ActionBarMenuItem doneItem;
     private ProxyDrawable proxyDrawable;
@@ -536,6 +547,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private View blurredView;
 
     private ItemOptions filterOptions;
+    private long lastTitleClickTime;
 
     private SelectAnimatedEmojiDialog.SelectAnimatedEmojiDialogWindow selectAnimatedEmojiDialog;
 
@@ -710,6 +722,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private final static int add_to_folder = 109;
     private final static int remove_from_folder = 110;
     private final static int community_ungroup = 111;
+    private final static int hide_chat = 112;
+    private final static int unhide_chat = 113;
+
+    private boolean isHiddenChats;
+    private ActionBarMenuSubItem hideItem;
+    private ActionBarMenuSubItem unhideItem;
 
     private final static int ARCHIVE_ITEM_STATE_PINNED = 0;
     private final static int ARCHIVE_ITEM_STATE_SHOWED = 1;
@@ -2167,7 +2185,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         private void updatePullState() {
-            parentPage.archivePullViewState = SharedConfig.archiveHidden ? ARCHIVE_ITEM_STATE_HIDDEN : ARCHIVE_ITEM_STATE_PINNED;
+            parentPage.archivePullViewState = (!isHiddenChats && SharedConfig.archiveHidden) ? ARCHIVE_ITEM_STATE_HIDDEN : ARCHIVE_ITEM_STATE_PINNED;
             if (parentPage.pullForegroundDrawable != null) {
                 parentPage.pullForegroundDrawable.setWillDraw(parentPage.archivePullViewState != ARCHIVE_ITEM_STATE_PINNED);
             }
@@ -2869,6 +2887,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             closeFragment = arguments.getBoolean("closeFragment", true);
             allowGlobalSearch = arguments.getBoolean("allowGlobalSearch", true);
             hasMainTabs = arguments.getBoolean("hasMainTabs", false);
+            isHiddenChats = arguments.getBoolean("hidden_chats", false);
+            if (isHiddenChats) {
+                hasMainTabs = false;
+            }
 
             byte[] requestPeerTypeBytes = arguments.getByteArray("requestPeerType");
             if (requestPeerTypeBytes != null) {
@@ -3224,6 +3246,17 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         ActionBarMenu menu = actionBar.createMenu();
         menu.setTranslationX(-dp(5));
         searchItem = menu.addItem(0, R.drawable.outline_header_search).setIsSearchField(true, false);
+        searchItem.setOnLongClickListener(v -> {
+            if (!isHiddenChats && folderId == 0 && communityId == 0 && !onlySelect
+                    && HiddenChatsController.getInstance(currentAccount).opensFromSearch()) {
+                try {
+                    v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                } catch (Exception ignored) {}
+                showHiddenChatsUnlockDialog();
+                return true;
+            }
+            return false;
+        });
         searchItem.setOnClickListener(v -> {
             showSearch(true, false, true);
             fragmentSearchFieldWatcher.toggleSearch(true);
@@ -3255,7 +3288,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         searchItem.setVisibility(View.GONE);
 
-        if (!onlySelect && searchString == null && folderId == 0 && communityId == 0) {
+        if (isHiddenChats) {
+            ActionBarMenuItem vaultOptions = menu.addItem(20, R.drawable.ic_ab_other);
+            vaultOptions.addSubItem(21, R.drawable.msg_permissions, "Change PIN");
+            vaultOptions.addSubItem(22, R.drawable.msg_secret, "Lock Vault");
+        } else if (!onlySelect && searchString == null && folderId == 0 && communityId == 0) {
             doneItem = new ActionBarMenuItem(context, null, getThemedColor(Theme.key_actionBarDefaultSelector), getThemedColor(Theme.key_actionBarDefaultIcon), true);
             doneItem.setText(LocaleController.getString(R.string.Done).toUpperCase());
             actionBar.addView(doneItem, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.RIGHT, 0, 0, 10, 0));
@@ -3281,6 +3318,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
             updateProxyButton(false, false);
         }
+        if (!isHiddenChats && !onlySelect && searchString == null && folderId == 0 && communityId == 0
+                && HiddenChatsController.getInstance(currentAccount).opensFromButton()) {
+            ActionBarMenuItem hiddenChatsItem = menu.addItem(24, R.drawable.msg_secret);
+            hiddenChatsItem.setContentDescription("Hidden Chats");
+        }
 
         fragmentSearchField = new FragmentSearchField(context, resourceProvider) {
             @Override
@@ -3294,12 +3336,39 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         fragmentSearchField.setPadding(dp(4), dp(4), dp(4), dp(4));
         fragmentSearchField.setPivotX(0);
         fragmentSearchField.setPivotY(0);
+        if (fragmentSearchField.getSearchIcon() != null) {
+            fragmentSearchField.getSearchIcon().setOnLongClickListener(v -> {
+                if (!isHiddenChats && folderId == 0 && communityId == 0 && !onlySelect
+                        && HiddenChatsController.getInstance(currentAccount).opensFromSearch()) {
+                    try {
+                        v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                    } catch (Exception ignored) {}
+                    showHiddenChatsUnlockDialog();
+                    return true;
+                }
+                return false;
+            });
+        }
         if (initialDialogsType == DIALOGS_TYPE_DEFAULT) {
             speedItem = menu.addItem(-47, R.drawable.avd_speed);
             AndroidUtilities.removeFromParent(speedItem);
             speedItem.setOnClickListener(v -> showDialog(new PremiumFeatureBottomSheet(DialogsActivity.this, PremiumPreviewFragment.PREMIUM_FEATURE_DOWNLOAD_SPEED, true)));
 
             fragmentSearchField.addAdditionalIcon(speedItem);
+
+            searchFilterItem = menu.addItem(-48, R.drawable.ic_ab_other);
+            AndroidUtilities.removeFromParent(searchFilterItem);
+            searchFilterItem.setSubMenuOpenSide(2);
+            privateChatsSubItem = searchFilterItem.addSubItem(SEARCH_OPTION_PRIVATE_CHATS, R.drawable.msg_channel, LocaleController.getString(R.string.SearchHideJoined), true);
+            privateChatsSubItem.setChecked(SharedConfig.searchHideJoined);
+            searchFilterItem.setOnClickListener(v -> {
+                if (privateChatsSubItem != null) {
+                    privateChatsSubItem.setChecked(SharedConfig.searchHideJoined);
+                }
+                searchFilterItem.toggleSubMenu();
+            });
+            fragmentSearchField.addAdditionalIcon(searchFilterItem);
+
             fragmentSearchField.updateColors();
         }
 
@@ -3501,10 +3570,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             actionBar.setBackgroundColor(getThemedColor(Theme.key_windowBackgroundWhite));
         } else {
-            if (searchString != null || folderId != 0 || communityId != 0) {
+            if (searchString != null || folderId != 0 || communityId != 0 || isHiddenChats) {
                 actionBar.setBackButtonDrawable(backDrawable = new BackDrawable(false));
             }
-            if (folderId != 0) {
+            if (isHiddenChats) {
+                actionBar.setTitle("Hidden Chats");
+            } else if (folderId != 0) {
                 actionBar.setTitle(getString(R.string.ArchivedChats));
             } else if (communityId != 0) {
                 actionBar.setTitle(DialogObject.getName(community));
@@ -3525,8 +3596,21 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 actionBar.setTitle(ssb, statusDrawable);
                 updateStatus(UserConfig.getInstance(currentAccount).getCurrentUser(), false);
             }
-            if (folderId == 0) {
+            if (folderId == 0 && !isHiddenChats) {
                 actionBar.setSupportsHolidayImage(true);
+            }
+            if (actionBar.getBackButton() != null) {
+                actionBar.getBackButton().setOnLongClickListener(v -> {
+                    if (!isHiddenChats && folderId == 0 && communityId == 0 && !onlySelect
+                            && HiddenChatsController.getInstance(currentAccount).opensFromMenu()) {
+                        try {
+                            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        } catch (Exception ignored) {}
+                        showHiddenChatsUnlockDialog();
+                        return true;
+                    }
+                    return false;
+                });
             }
         }
         //if (!onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD) {
@@ -3535,6 +3619,22 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             actionBar.setClipContent(true);
         //}
         actionBar.setTitleActionRunnable(() -> {
+            if (actionBar.isActionModeShowed()) {
+                return;
+            }
+            if (!isHiddenChats && folderId == 0 && communityId == 0 && !onlySelect
+                    && HiddenChatsController.getInstance(currentAccount).opensFromDoubleTapTitle()) {
+                long now = android.os.SystemClock.elapsedRealtime();
+                if (now - lastTitleClickTime < 350) {
+                    lastTitleClickTime = 0;
+                    try {
+                        fragmentView.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                    } catch (Exception ignored) {}
+                    showHiddenChatsUnlockDialog();
+                    return;
+                }
+                lastTitleClickTime = now;
+            }
             if (initialDialogsType != DIALOGS_TYPE_WIDGET) {
                 hideFloatingButton(false);
             }
@@ -3544,6 +3644,18 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 scrollToTop(true, true);
             }
         });
+        if (!isHiddenChats && folderId == 0 && communityId == 0 && !onlySelect
+                && HiddenChatsController.getInstance(currentAccount).opensFromTitle()) {
+            actionBar.setTitleLongActionRunnable(() -> {
+                if (actionBar.isActionModeShowed()) {
+                    return;
+                }
+                try {
+                    fragmentView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                } catch (Exception ignored) {}
+                showHiddenChatsUnlockDialog();
+            });
+        }
 
         if (
             (initialDialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect || initialDialogsType == DIALOGS_TYPE_FORWARD) &&
@@ -3675,14 +3787,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (initialDialogsType == DIALOGS_TYPE_FORWARD) {
                         return 0;
                     }
-                    if (tabId == filterTabsView.getDefaultTabId()) {
-                        return getMessagesStorage().getMainUnreadCount();
+                    if (isHiddenChats) {
+                        return getHiddenDialogsUnreadCount(tabId);
                     }
-                    ArrayList<MessagesController.DialogFilter> dialogFilters = getMessagesController().getDialogFilters();
-                    if (tabId < 0 || tabId >= dialogFilters.size()) {
-                        return 0;
-                    }
-                    return getMessagesController().getDialogFilters().get(tabId).unreadCount;
+                    return getVisibleDialogsUnreadCount(tabId);
                 }
 
                 @Override
@@ -3701,6 +3809,14 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
                     final MessagesController.DialogFilter dialogFilter;
                     if (tabView.getId() == filterTabsView.getDefaultTabId()) {
+                        if (!isHiddenChats && folderId == 0 && communityId == 0 && !onlySelect
+                                && HiddenChatsController.getInstance(currentAccount).opensFromAllTab()) {
+                            try {
+                                tabView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                            } catch (Exception ignored) {}
+                            showHiddenChatsUnlockDialog();
+                            return true;
+                        }
                         dialogFilter = null;
                     } else {
                         ArrayList<MessagesController.DialogFilter> dialogFilters = getMessagesController().getDialogFilters();
@@ -3869,6 +3985,33 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(int id) {
+                if (id == SEARCH_OPTION_PRIVATE_CHATS) {
+                    SharedConfig.toggleSearchHideJoined();
+                    if (privateChatsSubItem != null) {
+                        privateChatsSubItem.setChecked(SharedConfig.searchHideJoined);
+                    }
+                    BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
+                        R.drawable.msg_channel,
+                        SharedConfig.searchHideJoined ? LocaleController.getString(R.string.SearchHideJoinedBulletinOn) : LocaleController.getString(R.string.SearchHideJoinedBulletinOff)
+                    ).show();
+                    if (searchViewPager != null) {
+                        if (searchViewPager.dialogsSearchAdapter != null) {
+                            searchViewPager.dialogsSearchAdapter.notifyDataSetChanged();
+                        }
+                        if (searchViewPager.channelsSearchAdapter != null) {
+                            searchViewPager.channelsSearchAdapter.updateMyChannels();
+                            searchViewPager.channelsSearchAdapter.update(true);
+                        }
+                        if (searchViewPager.groupsSearchAdapter != null) {
+                            searchViewPager.groupsSearchAdapter.updateMyGroups();
+                            searchViewPager.groupsSearchAdapter.update(true);
+                        }
+                        if (fragmentSearchField != null && fragmentSearchField.editText != null) {
+                            searchViewPager.onTextChanged(fragmentSearchField.editText.getText().toString());
+                        }
+                    }
+                    return;
+                }
                 if ((id == SearchViewPager.forwardItemId || id == SearchViewPager.gotoItemId || id == SearchViewPager.deleteItemId || id == SearchViewPager.speedItemId) && searchViewPager != null) {
                     searchViewPager.onActionBarItemClick(id);
                     return;
@@ -3897,9 +4040,15 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         } else {
                             hideActionMode(true);
                         }
-                    } else if (onlySelect || folderId != 0 || communityId != 0) {
+                    } else if (onlySelect || folderId != 0 || communityId != 0 || isHiddenChats) {
                         finishFragment();
                     }
+                } else if (id == 21) {
+                    presentFragment(PasscodeActivity.determineOpenFragment());
+                } else if (id == 22) {
+                    finishFragment();
+                } else if (id == 24) {
+                    showHiddenChatsUnlockDialog();
                 } else if (id == 1) {
                     if (getParentActivity() == null) {
                         return;
@@ -4012,7 +4161,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         undoView.showWithAction(did, UndoView.ACTION_REMOVED_FROM_FOLDER, neverShow.size(), filter, null, null);
                     }
                     hideActionMode(false);
-                } else if (id == pin || id == read || id == delete || id == clear || id == mute || id == archive || id == block || id == archive2 || id == pin2) {
+                } else if (id == pin || id == read || id == delete || id == clear || id == mute || id == archive || id == block || id == archive2 || id == pin2 || id == hide_chat || id == unhide_chat) {
                     performSelectedDialogsAction(selectedDialogs, id, true, false);
                 }
             }
@@ -4195,7 +4344,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (hasStories && !rightSlidingDialogContainer.hasFragment() && !fixScrollYAfterArchiveOpened) {
                         pTop -= dp(DialogStoriesCell.HEIGHT_IN_DP);
                     }
-                    boolean hasHiddenArchive = !fixScrollYAfterArchiveOpened && viewPage.dialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && folderId == 0 && communityId == 0 && getMessagesController().hasHiddenArchive() && viewPage.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN;
+                    boolean hasHiddenArchive = !fixScrollYAfterArchiveOpened && viewPage.dialogsType == DIALOGS_TYPE_DEFAULT && !onlySelect && folderId == 0 && communityId == 0 && !isHiddenChats && getMessagesController().hasHiddenArchive() && viewPage.archivePullViewState == ARCHIVE_ITEM_STATE_HIDDEN;
                     if ((hasHiddenArchive || (hasStories && !rightSlidingDialogContainer.hasFragment())) && dy < 0) {
                         viewPage.listView.setOverScrollMode(View.OVER_SCROLL_ALWAYS);
                         int currentPosition = viewPage.layoutManager.findFirstVisibleItemPosition();
@@ -4618,8 +4767,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 }
             });
 
-            viewPage.archivePullViewState = SharedConfig.archiveHidden ? ARCHIVE_ITEM_STATE_HIDDEN : ARCHIVE_ITEM_STATE_PINNED;
-            if (viewPage.pullForegroundDrawable == null && folderId == 0 && communityId == 0) {
+            viewPage.archivePullViewState = (!isHiddenChats && SharedConfig.archiveHidden) ? ARCHIVE_ITEM_STATE_HIDDEN : ARCHIVE_ITEM_STATE_PINNED;
+            if (viewPage.pullForegroundDrawable == null && folderId == 0 && communityId == 0 && !isHiddenChats) {
                 viewPage.pullForegroundDrawable = new PullForegroundDrawable(LocaleController.getString(R.string.AccSwipeForArchive), LocaleController.getString(R.string.AccReleaseForArchive)) {
                     @Override
                     protected float getViewOffset() {
@@ -5167,6 +5316,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
 
         dialogStoriesCell = new DialogStoriesCell(context, this, currentAccount, isArchive() ? DialogStoriesCell.TYPE_ARCHIVE : DialogStoriesCell.TYPE_DIALOGS) {
+            @Override
+            protected boolean isDialogVisible(long dialogId) {
+                return !isHiddenChats || HiddenChatsController.getInstance(currentAccount).isChatHidden(dialogId);
+            }
+
             @Override
             public void onUserLongPressed(View view, long dialogId) {
                 MediaDataController.getInstance(currentAccount).loadHints(true);
@@ -6753,6 +6907,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         readItem = otherItem.addSubItem(read, R.drawable.msg_markread, LocaleController.getString(R.string.MarkAsRead));
         clearItem = otherItem.addSubItem(clear, R.drawable.msg_clear, LocaleController.getString(R.string.ClearHistory));
         blockItem = otherItem.addSubItem(block, R.drawable.msg_block, LocaleController.getString(R.string.BlockUser));
+        hideItem = otherItem.addSubItem(hide_chat, R.drawable.msg_secret, "Hide Chat");
+        unhideItem = otherItem.addSubItem(unhide_chat, R.drawable.msg_secret, "Unhide Chat");
 
         muteItem.setOnLongClickListener(e -> {
             performSelectedDialogsAction(selectedDialogs, mute, true, true);
@@ -7023,6 +7179,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     @Override
     public void onResume() {
         super.onResume();
+        getContactsController().reloadContactsStatusesMaybe(false);
         if (dialogStoriesCell != null) {
             dialogStoriesCell.onResume();
         }
@@ -8900,7 +9057,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     public boolean hasHiddenArchive() {
-        return !onlySelect && initialDialogsType == DIALOGS_TYPE_DEFAULT && communityId == 0 && folderId == 0 && getMessagesController().hasHiddenArchive();
+        return !isHiddenChats && !onlySelect && initialDialogsType == DIALOGS_TYPE_DEFAULT && communityId == 0 && folderId == 0 && getMessagesController().hasHiddenArchive();
     }
 
     private boolean waitingForDialogsAnimationEnd(ViewPage viewPage) {
@@ -9163,6 +9320,38 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         int count = selectedDialogs.size();
         int pinnedActionCount = 0;
+        if (action == hide_chat) {
+            final HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+            final ArrayList<Long> toHide = new ArrayList<>(selectedDialogs);
+            if (!controller.isPasscodeSet()) {
+                PasscodeActivity passcodeActivity = new PasscodeActivity(PasscodeActivity.TYPE_SETUP_CODE)
+                        .setForHiddenChats(true);
+                passcodeActivity.setOnPasscodeSuccess(() -> {
+                    for (int a = 0; a < toHide.size(); a++) {
+                        controller.hideChat(toHide.get(a));
+                    }
+                    hideActionMode(false);
+                    BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(R.drawable.msg_secret, "Chat hidden. Long-press the Moagram title to access.").show();
+                });
+                presentFragment(passcodeActivity);
+            } else {
+                for (int a = 0; a < toHide.size(); a++) {
+                    controller.hideChat(toHide.get(a));
+                }
+                hideActionMode(false);
+                BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(R.drawable.msg_secret, "Chat hidden. Long-press the Moagram title to access.").show();
+            }
+            return;
+        } else if (action == unhide_chat) {
+            final HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+            final ArrayList<Long> toUnhide = new ArrayList<>(selectedDialogs);
+            for (int a = 0; a < toUnhide.size(); a++) {
+                controller.unhideChat(toUnhide.get(a));
+            }
+            hideActionMode(false);
+            BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(R.drawable.msg_secret, "Chat unhidden.").show();
+            return;
+        }
         if (action == archive || action == archive2) {
             ArrayList<Long> copy = new ArrayList<>(selectedDialogs);
             getMessagesController().addDialogToFolder(copy, canUnarchiveCount == 0 ? 1 : 0, -1, null, 0);
@@ -9922,6 +10111,12 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     pin2Item.setVisibility(View.GONE);
                 }
             }
+        }
+        if (hideItem != null) {
+            hideItem.setVisibility(isHiddenChats ? View.GONE : View.VISIBLE);
+        }
+        if (unhideItem != null) {
+            unhideItem.setVisibility(isHiddenChats ? View.VISIBLE : View.GONE);
         }
         if (blockItem != null) {
             if (cantBlockCount != 0) {
@@ -10991,8 +11186,102 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
     private ArrayList<TLRPC.Dialog> botShareDialogs;
 
+    private ArrayList<TLRPC.Dialog> filterHiddenDialogs(ArrayList<TLRPC.Dialog> array, int currentAccount) {
+        if (array == null || isHiddenChats) {
+            return array;
+        }
+        HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+        if (!controller.hasHiddenChats()) {
+            return array;
+        }
+        ArrayList<TLRPC.Dialog> filtered = new ArrayList<>(array.size());
+        for (int i = 0; i < array.size(); i++) {
+            TLRPC.Dialog d = array.get(i);
+            if (d != null && !controller.isChatHidden(d.id)) {
+                filtered.add(d);
+            }
+        }
+        return filtered;
+    }
+
     @NonNull
     public ArrayList<TLRPC.Dialog> getDialogsArray(int currentAccount, int dialogsType, int folderId, boolean frozen) {
+        if (isHiddenChats) {
+            MessagesController messagesController = AccountInstance.getInstance(currentAccount).getMessagesController();
+            HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+            ArrayList<TLRPC.Dialog> source = controller.getHiddenDialogs(messagesController);
+            if (dialogsType == DIALOGS_TYPE_FOLDER1 || dialogsType == DIALOGS_TYPE_FOLDER2) {
+                MessagesController.DialogFilter filter = messagesController.selectedDialogFilter[dialogsType == DIALOGS_TYPE_FOLDER2 ? 1 : 0];
+                if (filter != null) {
+                    ArrayList<TLRPC.Dialog> filtered = new ArrayList<>(source.size());
+                    for (int i = 0; i < source.size(); i++) {
+                        TLRPC.Dialog dialog = source.get(i);
+                        if (dialog != null && filter.includesDialog(getAccountInstance(), dialog.id, dialog, true)) {
+                            filtered.add(dialog);
+                        }
+                    }
+                    return filtered;
+                }
+            }
+            return source;
+        }
+        return filterHiddenDialogs(getDialogsArrayInternal(currentAccount, dialogsType, folderId, frozen), currentAccount);
+    }
+
+    private int getHiddenDialogsUnreadCount(int tabId) {
+        MessagesController messagesController = getMessagesController();
+        MessagesController.DialogFilter filter = null;
+        if (filterTabsView != null && tabId != filterTabsView.getDefaultTabId()) {
+            ArrayList<MessagesController.DialogFilter> filters = messagesController.getDialogFilters();
+            if (tabId >= 0 && tabId < filters.size()) {
+                filter = filters.get(tabId);
+            }
+        }
+        int count = 0;
+        ArrayList<TLRPC.Dialog> hiddenDialogs = HiddenChatsController.getInstance(currentAccount).getHiddenDialogs(messagesController);
+        for (int i = 0; i < hiddenDialogs.size(); i++) {
+            TLRPC.Dialog dialog = hiddenDialogs.get(i);
+            if (filter != null && !filter.includesDialog(getAccountInstance(), dialog.id, dialog, true)) {
+                continue;
+            }
+            if (messagesController.getDialogUnreadCount(dialog) > 0 || dialog.unread_mark) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int getVisibleDialogsUnreadCount(int tabId) {
+        MessagesController messagesController = getMessagesController();
+        HiddenChatsController hiddenChatsController = HiddenChatsController.getInstance(currentAccount);
+        MessagesController.DialogFilter filter = null;
+        boolean defaultTab = filterTabsView == null || tabId == filterTabsView.getDefaultTabId();
+        if (!defaultTab) {
+            ArrayList<MessagesController.DialogFilter> filters = messagesController.getDialogFilters();
+            if (tabId < 0 || tabId >= filters.size()) {
+                return 0;
+            }
+            filter = filters.get(tabId);
+        }
+        ArrayList<TLRPC.Dialog> dialogs = defaultTab ? messagesController.getDialogs(folderId) : messagesController.getAllDialogs();
+        int count = 0;
+        for (int i = 0; i < dialogs.size(); i++) {
+            TLRPC.Dialog dialog = dialogs.get(i);
+            if (dialog == null || hiddenChatsController.isChatHidden(dialog.id)) {
+                continue;
+            }
+            if (filter != null && !filter.includesDialog(getAccountInstance(), dialog.id, dialog)) {
+                continue;
+            }
+            if (messagesController.getDialogUnreadCount(dialog) > 0 || dialog.unread_mark) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    @NonNull
+    private ArrayList<TLRPC.Dialog> getDialogsArrayInternal(int currentAccount, int dialogsType, int folderId, boolean frozen) {
         if (frozen && frozenDialogsList != null) {
             return frozenDialogsList;
         }
@@ -12754,9 +13043,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         if (StoryRecorder.isVisible() || (getLastStoryViewer() != null && getLastStoryViewer().isFullyVisible())) {
             animated = false;
         }
-        boolean onlySelfStories = !isArchive() && getStoriesController().hasOnlySelfStories();
+        boolean onlySelfStories = !isHiddenChats && !isArchive() && getStoriesController().hasOnlySelfStories();
         boolean newVisibility;
-        if (communityId != 0) {
+        if (isHiddenChats) {
+            newVisibility = dialogStoriesCell.hasVisibleStories();
+        } else if (communityId != 0) {
             newVisibility = false;
         } else if (isArchive()) {
             newVisibility = !getStoriesController().getHiddenList().isEmpty();
@@ -13167,6 +13458,26 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 args.putLong("chat_id", ((TLRPC.Chat) obj).id);
                 ChatActivity chatActivity = new ChatActivity(args);
                 chatActivity.setNextChannels(searchViewPager.channelsSearchAdapter.getNextChannels(position));
+                presentFragment(chatActivity);
+            } else if (obj instanceof MessageObject) {
+                MessageObject msg = (MessageObject) obj;
+                Bundle args = new Bundle();
+                if (msg.getDialogId() >= 0) {
+                    args.putLong("user_id", msg.getDialogId());
+                } else {
+                    args.putLong("chat_id", -msg.getDialogId());
+                }
+                args.putInt("message_id", msg.getId());
+                ChatActivity chatActivity = new ChatActivity(args);
+                presentFragment(highlightFoundQuote(chatActivity, msg));
+            }
+        });
+        searchViewPager.groupsSearchListView.setOnItemClickListener((view, position, x, y) -> {
+            Object obj = searchViewPager.groupsSearchAdapter.getObject(position);
+            if (obj instanceof TLRPC.Chat) {
+                Bundle args = new Bundle();
+                args.putLong("chat_id", ((TLRPC.Chat) obj).id);
+                ChatActivity chatActivity = new ChatActivity(args);
                 presentFragment(chatActivity);
             } else if (obj instanceof MessageObject) {
                 MessageObject msg = (MessageObject) obj;
@@ -14431,6 +14742,250 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         o.show();
 
         return true;
+    }
+
+    public boolean isHiddenChats() {
+        return isHiddenChats;
+    }
+
+    private void openHiddenChats() {
+        Bundle args = new Bundle();
+        args.putBoolean("hidden_chats", true);
+        presentFragment(new DialogsActivity(args));
+    }
+
+    private void showHiddenChatsUnlockDialog() {
+        if (getParentActivity() == null) {
+            return;
+        }
+        HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+        PasscodeActivity passcodeActivity = new PasscodeActivity(
+                !controller.isPasscodeSet()
+                        ? PasscodeActivity.TYPE_SETUP_CODE
+                        : PasscodeActivity.TYPE_ENTER_CODE_TO_MANAGE_SETTINGS
+        );
+        passcodeActivity.setForHiddenChats(true);
+        passcodeActivity.setOnPasscodeSuccess(this::openHiddenChats);
+        presentFragment(passcodeActivity);
+    }
+
+    private void showHiddenChatsSetPasscodeDialog(Runnable onSuccess) {
+        if (getParentActivity() == null) {
+            return;
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle("Set Vault PIN");
+        builder.setMessage("Enter a 4-digit PIN to protect hidden chats.");
+
+        FrameLayout container = new FrameLayout(getParentActivity());
+        final EditTextBoldCursor editText = new EditTextBoldCursor(getParentActivity());
+        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
+        editText.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
+        editText.setGravity(Gravity.CENTER);
+        editText.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        editText.setTransformationMethod(PasswordTransformationMethod.getInstance());
+        editText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4)});
+        editText.setBackground(Theme.createEditTextDrawable(getParentActivity(), true));
+        container.addView(editText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36, Gravity.CENTER, 24, 10, 24, 10));
+        builder.setView(container);
+
+        builder.setPositiveButton(LocaleController.getString(R.string.Next), null);
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), (d, w) -> {
+            AndroidUtilities.hideKeyboard(editText);
+        });
+
+        final AlertDialog dialog = builder.create();
+        showDialog(dialog);
+
+        editText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (s != null && s.length() == 4) {
+                    String pin = s.toString();
+                    AndroidUtilities.hideKeyboard(editText);
+                    dialog.dismiss();
+                    showHiddenChatsConfirmPasscodeDialog(pin, onSuccess);
+                }
+            }
+        });
+
+        View positiveBtn = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
+        if (positiveBtn != null) {
+            positiveBtn.setOnClickListener(v -> {
+                String pin = editText.getText().toString();
+                if (pin.length() == 4) {
+                    AndroidUtilities.hideKeyboard(editText);
+                    dialog.dismiss();
+                    showHiddenChatsConfirmPasscodeDialog(pin, onSuccess);
+                } else {
+                    AndroidUtilities.shakeView(editText);
+                }
+            });
+        }
+
+        editText.postDelayed(() -> {
+            editText.requestFocus();
+            AndroidUtilities.showKeyboard(editText);
+        }, 100);
+    }
+
+    private void showHiddenChatsConfirmPasscodeDialog(String firstPin, Runnable onSuccess) {
+        if (getParentActivity() == null) {
+            return;
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle("Confirm Vault PIN");
+        builder.setMessage("Re-enter your 4-digit PIN to confirm.");
+
+        FrameLayout container = new FrameLayout(getParentActivity());
+        final EditTextBoldCursor editText = new EditTextBoldCursor(getParentActivity());
+        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
+        editText.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
+        editText.setGravity(Gravity.CENTER);
+        editText.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        editText.setTransformationMethod(PasswordTransformationMethod.getInstance());
+        editText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4)});
+        editText.setBackground(Theme.createEditTextDrawable(getParentActivity(), true));
+        container.addView(editText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36, Gravity.CENTER, 24, 10, 24, 10));
+        builder.setView(container);
+
+        builder.setPositiveButton(LocaleController.getString(R.string.Save), null);
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), (d, w) -> {
+            AndroidUtilities.hideKeyboard(editText);
+        });
+
+        final AlertDialog dialog = builder.create();
+        showDialog(dialog);
+
+        editText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (s != null && s.length() == 4) {
+                    String pin = s.toString();
+                    if (pin.equals(firstPin)) {
+                        AndroidUtilities.hideKeyboard(editText);
+                        dialog.dismiss();
+                        HiddenChatsController.getInstance(currentAccount).setPasscode(pin);
+                        BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(R.raw.chats_infotip, "PIN set successfully").show();
+                        if (onSuccess != null) {
+                            onSuccess.run();
+                        }
+                    } else {
+                        AndroidUtilities.shakeView(editText);
+                        editText.setText("");
+                    }
+                }
+            }
+        });
+
+        View positiveBtn = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
+        if (positiveBtn != null) {
+            positiveBtn.setOnClickListener(v -> {
+                String pin = editText.getText().toString();
+                if (pin.equals(firstPin)) {
+                    AndroidUtilities.hideKeyboard(editText);
+                    dialog.dismiss();
+                    HiddenChatsController.getInstance(currentAccount).setPasscode(pin);
+                    BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(R.raw.chats_infotip, "PIN set successfully").show();
+                    if (onSuccess != null) {
+                        onSuccess.run();
+                    }
+                } else {
+                    AndroidUtilities.shakeView(editText);
+                    editText.setText("");
+                }
+            });
+        }
+
+        editText.postDelayed(() -> {
+            editText.requestFocus();
+            AndroidUtilities.showKeyboard(editText);
+        }, 100);
+    }
+
+    private void showHiddenChatsChangePasscodeDialog() {
+        if (getParentActivity() == null) {
+            return;
+        }
+        final HiddenChatsController controller = HiddenChatsController.getInstance(currentAccount);
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle("Change Vault PIN");
+        builder.setMessage("Enter your current 4-digit PIN.");
+
+        FrameLayout container = new FrameLayout(getParentActivity());
+        final EditTextBoldCursor editText = new EditTextBoldCursor(getParentActivity());
+        editText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 20);
+        editText.setTextColor(getThemedColor(Theme.key_dialogTextBlack));
+        editText.setGravity(Gravity.CENTER);
+        editText.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        editText.setTransformationMethod(PasswordTransformationMethod.getInstance());
+        editText.setFilters(new InputFilter[]{new InputFilter.LengthFilter(4)});
+        editText.setBackground(Theme.createEditTextDrawable(getParentActivity(), true));
+        container.addView(editText, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 36, Gravity.CENTER, 24, 10, 24, 10));
+        builder.setView(container);
+
+        builder.setPositiveButton(LocaleController.getString(R.string.Next), null);
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), (d, w) -> {
+            AndroidUtilities.hideKeyboard(editText);
+        });
+
+        final AlertDialog dialog = builder.create();
+        showDialog(dialog);
+
+        editText.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (s != null && s.length() == 4) {
+                    String pin = s.toString();
+                    if (controller.checkPasscode(pin)) {
+                        AndroidUtilities.hideKeyboard(editText);
+                        dialog.dismiss();
+                        showHiddenChatsSetPasscodeDialog(null);
+                    } else {
+                        AndroidUtilities.shakeView(editText);
+                        editText.setText("");
+                    }
+                }
+            }
+        });
+
+        View positiveBtn = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
+        if (positiveBtn != null) {
+            positiveBtn.setOnClickListener(v -> {
+                String pin = editText.getText().toString();
+                if (controller.checkPasscode(pin)) {
+                    AndroidUtilities.hideKeyboard(editText);
+                    dialog.dismiss();
+                    showHiddenChatsSetPasscodeDialog(null);
+                } else {
+                    AndroidUtilities.shakeView(editText);
+                    editText.setText("");
+                }
+            });
+        }
+
+        editText.postDelayed(() -> {
+            editText.requestFocus();
+            AndroidUtilities.showKeyboard(editText);
+        }, 100);
     }
 
 }

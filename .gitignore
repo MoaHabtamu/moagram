@@ -14,3 +14,8 @@ TMessagesProj_AppHockeyApp/afat/
 TMessagesProj_AppStandalone/afat/
 TMessagesProj_AppHuawei/afat/
 TMessagesProj/jni/ffmpeg/build_android
+
+# Personal signing material and packaged builds
+/TMessagesProj/config/moagram_release.keystore
+*.apk
+*.aab

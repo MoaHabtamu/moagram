@@ -1267,16 +1267,18 @@ public class FileRefController extends BaseController {
                 }
             } else if (response instanceof TLRPC.TL_help_appUpdate) {
                 TLRPC.TL_help_appUpdate appUpdate = (TLRPC.TL_help_appUpdate) response;
-                try {
-                    SharedConfig.pendingAppUpdate = appUpdate;
-                    SharedConfig.saveConfig();
-                } catch (Exception e) {
-                    FileLog.e(e);
-                }
-                try {
-                    NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateAvailable);
-                } catch (Exception e) {
-                    FileLog.e(e);
+                if (BuildVars.CHECK_UPDATES) {
+                    try {
+                        SharedConfig.pendingAppUpdate = appUpdate;
+                        SharedConfig.saveConfig();
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                    }
+                    try {
+                        NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateAvailable);
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                    }
                 }
                 try {
                     if (appUpdate.document != null) {
@@ -1626,16 +1628,18 @@ public class FileRefController extends BaseController {
             }
         } else if (response instanceof TLRPC.TL_help_appUpdate) {
             TLRPC.TL_help_appUpdate appUpdate = (TLRPC.TL_help_appUpdate) response;
-            try {
-                SharedConfig.pendingAppUpdate = appUpdate;
-                SharedConfig.saveConfig();
-            } catch (Exception e) {
-                FileLog.e(e);
-            }
-            try {
-                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateAvailable);
-            } catch (Exception e) {
-                FileLog.e(e);
+            if (BuildVars.CHECK_UPDATES) {
+                try {
+                    SharedConfig.pendingAppUpdate = appUpdate;
+                    SharedConfig.saveConfig();
+                } catch (Exception e) {
+                    FileLog.e(e);
+                }
+                try {
+                    NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.appUpdateAvailable);
+                } catch (Exception e) {
+                    FileLog.e(e);
+                }
             }
             try {
                 if (appUpdate.document != null) {

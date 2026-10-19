@@ -62,6 +62,7 @@ import org.telegram.messenger.R;
 import org.telegram.messenger.SendMessageChatArguments;
 import org.telegram.messenger.SendMessagesHelper;
 import org.telegram.messenger.SharedConfig;
+import org.telegram.messenger.TelegraphPublisher;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.tgnet.TLObject;
@@ -682,7 +683,7 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
                 currentMenuVisible.dismiss();
                 currentMenuVisible = null;
             }
-            final boolean premiumLock = !MessagesController.getInstance(currentAccount).richEditorAllowed() && !UserConfig.getInstance(currentAccount).isPremium();
+            final boolean premiumLock = false;
             final BlockRow row = listView.findFocusedRow();
             final ItemOptions o = ItemOptions.makeOptions(RichEditor.this, v, true).dontFocus();
             final ItemOptions headers = o.makeSwipeback();
@@ -1887,9 +1888,7 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
     }
 
     private boolean isSendLocked() {
-        return !MessagesController.getInstance(currentAccount).richEditorAllowed()
-            && !UserConfig.getInstance(currentAccount).isPremium()
-            && listView.isLossy();
+        return false;
     }
 
     private void updateSendButtonLock() {
@@ -1968,15 +1967,55 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
         if (chatActivity == null) return;
         if (!listView.hasAnyText()) return;
         if (listView.hasPendingUploads()) return;
-        if (!listView.isWithinLimits()) { updateSendButtonEnabled(); return; }
-        if (!MessagesController.getInstance(currentAccount).richEditorAllowed()) {
+        if (!MessagesController.getInstance(currentAccount).richEditorAllowed() || !UserConfig.getInstance(currentAccount).isPremium()) {
             final ChatActivityEnterView enterView = chatActivity.getChatActivityEnterView();
-            if (enterView == null) return;
             sent = true;
             if (onSentCallback != null) {
                 onSentCallback.run();
             }
-            enterView.sendConvertedRichAsSimple(listView.toSimpleMessage(), notify, scheduleDate, scheduleRepeatPeriod);
+            final ArrayList<TL_iv.PageBlock> sendBlocks = listView.flattenRowsToBlocks();
+            if (sendBlocks.isEmpty()) {
+                finishFragment();
+                return;
+            }
+            final CharSequence fallbackSimple = listView.toSimpleMessage();
+            final MessageObject editing = editingMessageObject;
+            TelegraphPublisher.publish(currentAccount, null, sendBlocks, new TelegraphPublisher.Callback() {
+                @Override
+                public void onSuccess(String url) {
+                    if (editing != null && chatActivity != null) {
+                        chatActivity.getSendMessagesHelper().editMessage(editing, url, false, chatActivity, null, scheduleDate, scheduleRepeatPeriod);
+                    } else if (enterView != null) {
+                        enterView.sendConvertedRichAsSimple(url, notify, scheduleDate, scheduleRepeatPeriod);
+                    } else if (chatActivity != null) {
+                        chatActivity.getSendMessagesHelper().sendMessage(
+                            SendMessagesHelper.SendMessageParams.of(
+                                url,
+                                chatActivity.getDialogId(),
+                                chatActivity.getReplyMessage(),
+                                chatActivity.getThreadMessage(),
+                                null,
+                                true,
+                                null,
+                                null,
+                                null,
+                                notify,
+                                scheduleDate,
+                                scheduleRepeatPeriod,
+                                null,
+                                false
+                            )
+                        );
+                    }
+                }
+
+                @Override
+                public void onError(Exception error) {
+                    if (enterView != null) {
+                        enterView.sendConvertedRichAsSimple(fallbackSimple, notify, scheduleDate, scheduleRepeatPeriod);
+                    }
+                }
+            });
             finishFragment();
             return;
         }
@@ -2504,7 +2543,7 @@ public class RichEditor extends BaseFragment implements NotificationCenter.Notif
     }
 
     private void updatePremiumButtons() {
-        final boolean premiumLock = !MessagesController.getInstance(currentAccount).richEditorAllowed() && !UserConfig.getInstance(currentAccount).isPremium();
+        final boolean premiumLock = false;
         for (Button b : premiumButtons) {
             b.setPremiumLocked(premiumLock);
         }

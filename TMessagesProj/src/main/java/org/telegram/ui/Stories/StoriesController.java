@@ -38,6 +38,8 @@ import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.NotificationsController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SendMessagesHelper;
+import org.telegram.messenger.SharedConfig;
+import org.telegram.messenger.GhostModeController;
 import org.telegram.messenger.Timer;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
@@ -159,6 +161,7 @@ public class StoriesController {
         };
 
         draftsController = new DraftsController(currentAccount);
+        MessagesStorage.getInstance(currentAccount).pruneOldStoryViewsCache(60);
     }
 
     private TL_stories.TL_storiesStealthMode readStealthMode(String string) {
@@ -304,6 +307,7 @@ public class StoriesController {
             loadFromServer(true);
         }
         firstLoad = false;
+        checkAndCacheSelfStoryViews();
     }
 
     public void loadHiddenStories() {
@@ -1067,6 +1071,9 @@ public class StoriesController {
 
             FileLog.d("StoriesController processAllStoriesResponse dialogId=" + user_id + " overwrite stories " + stories_userStories.stories.stories.size());
             NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.storiesUpdated);
+            if (user != null && user.self) {
+                checkAndCacheSelfStoryViews();
+            }
         }));
     }
 
@@ -1159,6 +1166,7 @@ public class StoriesController {
             }
         });
         storiesStorage.deleteStory(dialogId, storyItem.id);
+        MessagesStorage.getInstance(currentAccount).deleteStoryViewsCache(dialogId, storyItem.id);
         NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.storiesUpdated);
         MessagesController.getInstance(currentAccount).checkArchiveFolder();
         updateDeletedStoriesInLists(dialogId, Arrays.asList(storyItem));
@@ -1222,6 +1230,11 @@ public class StoriesController {
         });
         updateDeletedStoriesInLists(dialogId, storyItems);
         storiesStorage.deleteStories(dialogId, req.id);
+        if (req.id != null) {
+            for (int i = 0; i < req.id.size(); i++) {
+                MessagesStorage.getInstance(currentAccount).deleteStoryViewsCache(dialogId, req.id.get(i));
+            }
+        }
         NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.storiesUpdated);
     }
 
@@ -1297,10 +1310,12 @@ public class StoriesController {
             if (!profile) {
                 storiesStorage.updateMaxReadId(dialogId, newReadId);
             }
-            TL_stories.TL_stories_readStories req = new TL_stories.TL_stories_readStories();
-            req.peer = MessagesController.getInstance(currentAccount).getInputPeer(dialogId);
-            req.max_id = storyItem.id;
-            ConnectionsManager.getInstance(currentAccount).sendRequest(req, null);
+            if (!GhostModeController.getInstance(currentAccount).isStoriesHidden()) {
+                TL_stories.TL_stories_readStories req = new TL_stories.TL_stories_readStories();
+                req.peer = MessagesController.getInstance(currentAccount).getInputPeer(dialogId);
+                req.max_id = storyItem.id;
+                ConnectionsManager.getInstance(currentAccount).sendRequest(req, null);
+            }
             NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.storiesReadUpdated);
             return true;
         }
@@ -1705,6 +1720,9 @@ public class StoriesController {
             TLRPC.User user = MessagesController.getInstance(currentAccount).getUser(dialogId);
             if (isContactOrService(user) || user.self) {
                 storiesStorage.putPeerStories(stories);
+            }
+            if (dialogId == UserConfig.getInstance(currentAccount).clientUserId) {
+                checkAndCacheSelfStoryViews();
             }
         } else {
             TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-dialogId);
@@ -3725,6 +3743,10 @@ public class StoriesController {
             if (seenStories.contains(storyId)) return false;
             seenStories.add(storyId);
             saveCache();
+            if (GhostModeController.getInstance(currentAccount).isStoriesHidden()) {
+                NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.storiesReadUpdated);
+                return true;
+            }
             TL_stories.TL_stories_incrementStoryViews req = new TL_stories.TL_stories_incrementStoryViews();
             req.peer = MessagesController.getInstance(currentAccount).getInputPeer(dialogId);
             req.id.add(storyId);
@@ -5263,6 +5285,76 @@ public class StoriesController {
                 }
                 unsupportedStoriesChecked.add(key);
                 mainSettings.edit().putStringSet("unsupported_stories_checked", unsupportedStoriesChecked).apply();
+            }
+        }));
+    }
+
+    private final HashSet<Integer> cachingStoryViews = new HashSet<>();
+    private long lastCacheSelfStoriesTime = 0;
+
+    public void checkAndCacheSelfStoryViews() {
+        if (!SharedConfig.cacheStoryViewers) {
+            return;
+        }
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastCacheSelfStoriesTime < 60000) {
+            return;
+        }
+        lastCacheSelfStoriesTime = currentTime;
+        long clientUserId = UserConfig.getInstance(currentAccount).clientUserId;
+        if (clientUserId == 0) {
+            return;
+        }
+        TL_stories.PeerStories selfStories = allStoriesMap.get(clientUserId);
+        if (selfStories == null || selfStories.stories == null || selfStories.stories.isEmpty()) {
+            loadAllStoriesForDialog(clientUserId);
+            return;
+        }
+        for (int i = 0; i < selfStories.stories.size(); i++) {
+            TL_stories.StoryItem story = selfStories.stories.get(i);
+            if (story == null || story instanceof TL_stories.TL_storyItemDeleted) {
+                continue;
+            }
+            if (StoriesUtilities.hasExpiredViews(story)) {
+                continue;
+            }
+            if (cachingStoryViews.contains(story.id)) {
+                continue;
+            }
+            cachingStoryViews.add(story.id);
+            fetchAndCacheViews(clientUserId, story.id, null, 0);
+        }
+    }
+
+    private void fetchAndCacheViews(long clientUserId, int storyId, String offset, int fetchedCount) {
+        if (!SharedConfig.cacheStoryViewers) {
+            cachingStoryViews.remove(storyId);
+            return;
+        }
+        TL_stories.TL_stories_getStoryViewsList req = new TL_stories.TL_stories_getStoryViewsList();
+        req.id = storyId;
+        req.peer = MessagesController.getInstance(currentAccount).getInputPeer(clientUserId);
+        req.q = "";
+        req.just_contacts = false;
+        req.reactions_first = true;
+        req.limit = 100;
+        req.offset = offset != null ? offset : "";
+        ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+            if (response instanceof TL_stories.StoryViewsList) {
+                TL_stories.StoryViewsList res = (TL_stories.StoryViewsList) response;
+                MessagesController.getInstance(currentAccount).getStoriesController().applyStoryViewsBlocked(res);
+                MessagesController.getInstance(currentAccount).putUsers(res.users, false);
+                MessagesController.getInstance(currentAccount).putChats(res.chats, false);
+                MessagesStorage.getInstance(currentAccount).putUsersAndChats(res.users, res.chats, true, false);
+                MessagesStorage.getInstance(currentAccount).saveStoryViewsCache(clientUserId, storyId, res);
+                int totalFetched = fetchedCount + (res.views != null ? res.views.size() : 0);
+                if (!TextUtils.isEmpty(res.next_offset) && totalFetched < 1000 && res.views != null && !res.views.isEmpty()) {
+                    fetchAndCacheViews(clientUserId, storyId, res.next_offset, totalFetched);
+                } else {
+                    cachingStoryViews.remove(storyId);
+                }
+            } else {
+                cachingStoryViews.remove(storyId);
             }
         }));
     }

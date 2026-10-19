@@ -57457,6 +57457,8 @@ public class TLRPC {
         public boolean noforwards;
         public boolean invert_media;
         public boolean offline;
+        public boolean wasDeleted;
+        public boolean hasEditHistory;
         public boolean video_processing_pending;
         public TL_factCheck factcheck;
         public int report_delivery_until_date;

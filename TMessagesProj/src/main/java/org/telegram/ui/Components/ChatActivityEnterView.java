@@ -4796,7 +4796,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                         AlertsCreator.createScheduleDatePickerDialog(parentActivity, parentFragment.getDialogId(), new AlertsCreator.ScheduleDatePickerDelegate() {
                             @Override
                             public void didSelectDate(boolean notify, int scheduleDate, int scheduleRepeatPeriod) {
-                                sendMessageInternal(notify, scheduleDate, 0, 0, true);
+                                sendMessageInternal(notify, scheduleDate, scheduleRepeatPeriod, 0, true);
                             }
                         }, resourcesProvider);
                     });
@@ -7214,14 +7214,6 @@ public class ChatActivityEnterView extends FrameLayout implements
     }
 
     public boolean sendMessage() {
-        if (richDraftActive && !UserConfig.getInstance(currentAccount).isPremium()) {
-            RichEditor.openConversionSheet(getContext(), this::openRichEditorWithoutFormatting, () -> {
-                if (parentFragment != null) {
-                    parentFragment.showDialog(new PremiumFeatureBottomSheet(parentFragment, PremiumPreviewFragment.PREMIUM_FEATURE_RICH_EDITOR, true));
-                }
-            }, resourcesProvider);
-            return true;
-        }
         if (isInScheduleMode()) {
             AlertsCreator.createScheduleDatePickerDialog(parentActivity, parentFragment.getDialogId(), new AlertsCreator.ScheduleDatePickerDelegate() {
                 @Override
@@ -10805,6 +10797,27 @@ public class ChatActivityEnterView extends FrameLayout implements
     private void sendRichDraft(boolean notify, int scheduleDate, int scheduleRepeatPeriod, long payStars) {
         final TL_iv.RichMessage rich = richDraftMessage;
         if (rich == null) {
+            return;
+        }
+        if (!MessagesController.getInstance(currentAccount).richEditorAllowed() || !UserConfig.getInstance(currentAccount).isPremium()) {
+            final CharSequence fallbackSimple = RichMessageConvert.toCharSequence(rich);
+            org.telegram.messenger.TelegraphPublisher.publish(currentAccount, null, rich.blocks, new org.telegram.messenger.TelegraphPublisher.Callback() {
+                @Override
+                public void onSuccess(String url) {
+                    sendButton.setEffect(effectId = 0);
+                    messageEditText.setText("");
+                    clearRichDraft();
+                    sendConvertedRichAsSimple(url, notify, scheduleDate, scheduleRepeatPeriod);
+                }
+
+                @Override
+                public void onError(Exception error) {
+                    sendButton.setEffect(effectId = 0);
+                    messageEditText.setText("");
+                    clearRichDraft();
+                    sendConvertedRichAsSimple(fallbackSimple, notify, scheduleDate, scheduleRepeatPeriod);
+                }
+            });
             return;
         }
         SendMessagesHelper.prepareSendingArticle(
