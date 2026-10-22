@@ -7,12 +7,12 @@
 | Tool | Project configuration |
 | --- | --- |
 | JDK | 17 or a compatible newer JDK; the existing build was also checked with JDK 21 |
-| Gradle | 8.11.1 through the included wrapper |
-| Android Gradle Plugin | 8.10.1 |
+| Gradle | 8.13 through the included wrapper |
+| Android Gradle Plugin | 8.13.2 |
 | Android SDK platform / Build Tools | 36 / 36.0.0 |
 | Android NDK | 27.2.12479018 |
 | CMake | 3.22.1 |
-| Minimum Android version | API 21 / Android 5.0 |
+| Minimum Android version | API 23 / Android 6.0 |
 
 Install Git and the Android SDK command-line tools, or open the repository root in a compatible Android Studio installation. Ensure `java`, `javac`, and the SDK tools are available. The first build needs internet access to download dependencies; `--offline` only works after they are cached.
 
