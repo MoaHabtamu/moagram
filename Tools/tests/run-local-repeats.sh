@@ -17,7 +17,18 @@ repeat_temp="$(mktemp -d)"
 trap 'rm -rf "$repeat_temp"' EXIT
 repeat_gson="${REPEAT_GSON_JAR:-/usr/share/java/gson-2.10.1.jar}"
 if [[ ! -f "$repeat_gson" ]]; then
-    repeat_gson="$(rg --files "${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/com.google.code.gson/gson" | rg '/gson-[0-9.]+\.jar$' | sort -V | tail -n 1)"
+    repeat_gson="$(python3 - "${GRADLE_USER_HOME:-$HOME/.gradle}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+jars = list(Path(sys.argv[1]).glob(
+    'caches/modules-2/files-2.1/com.google.code.gson/gson/*/*/gson-*.jar'))
+if not jars:
+    sys.exit('Gson not found. Compile the app first or set REPEAT_GSON_JAR.')
+print(max(jars, key=lambda path: tuple(int(part) for part in re.findall(r'\d+', path.name))))
+PY
+)"
 fi
 repeat_classpath="$repeat_classes:$repeat_android:$repeat_gson"
 javac -cp "$repeat_classpath" -sourcepath '' -d "$repeat_temp" \
