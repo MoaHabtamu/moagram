@@ -1,0 +1,46 @@
+name: Check Telegram updates
+
+on:
+  schedule:
+    # 05:23 in Africa/Addis_Ababa. GitHub schedules can be delayed.
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: telegram-upstream
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    if: github.repository == 'MoaHabtamu/moagram'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      candidate: ${{ steps.update.outputs.candidate }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Merge Telegram into the update branch
+        id: update
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 Tools/upstream/sync-telegram.py
+
+  validate:
+    needs: prepare
+    if: needs.prepare.outputs.candidate != ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/android-checks.yml
+    with:
+      ref: ${{ needs.prepare.outputs.candidate }}
+      build_apk: true

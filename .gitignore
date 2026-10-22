@@ -19,3 +19,4 @@ TMessagesProj/jni/ffmpeg/build_android
 /TMessagesProj/config/moagram_release.keystore
 *.apk
 *.aab
+__pycache__/

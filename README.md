@@ -58,6 +58,7 @@ Use JDK 17 or a compatible newer JDK, Android SDK 36, NDK 27.2.12479018, and CMa
 | Set up daily or weekly messages | [Repeating messages](docs/REPEATING_MESSAGES.md) |
 | Compile my own APK | [Building](docs/BUILDING.md) |
 | Find the relevant code and run checks | [Development](docs/DEVELOPMENT.md) |
+| Keep Moagram current with Telegram | [Automated upstream updates](docs/UPSTREAM.md#automated-telegram-updates) |
 | Report a bug or propose a change | [Contributing](CONTRIBUTING.md) |
 | Report a vulnerability privately | [Security policy](SECURITY.md) |
 

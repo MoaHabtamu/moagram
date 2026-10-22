@@ -61,3 +61,7 @@ git fetch upstream
 ```
 
 Fetching is separate from merging. Review upstream updates in an isolated branch and run relevant checks before changing the working release. Preserve attribution and license notices.
+
+Maintainers have a daily **Check Telegram updates** workflow that prepares a draft
+PR or reports merge conflicts. See [automated upstream updates](UPSTREAM.md#automated-telegram-updates)
+for setup, recovery, CI limitations, and the required merge-commit strategy.
