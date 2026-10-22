@@ -1670,8 +1670,7 @@ public class LocaleController {
                 return "LOC_ERR: " + key;
             }
 
-            value = sanitizeMoagram(value);
-            SpannableStringBuilder builder = new SpannableStringBuilder(value);
+            SpannableStringBuilder builder = new SpannableStringBuilder(sanitizeMoagram(value));
             for (int i = 0; i < args.length; i++) {
                 String formatter = "s";
                 CharSequence replaceWith = "";

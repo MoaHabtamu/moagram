@@ -159,6 +159,8 @@ import me.vkryl.android.animator.FactorAnimator;
 public class SettingsActivity extends BaseFragment implements NotificationCenter.NotificationCenterDelegate, ImageUpdater.ImageUpdaterDelegate, MainTabsActivity.TabFragmentDelegate, FactorAnimator.Target {
 
     private static final int ANIMATOR_ID_SEARCH_PAGE_VISIBLE = 0;
+    private static final int ID_HIDDEN_CHATS = 10001;
+    private static final int ID_SEARCH_HIDE_JOINED = 10002;
 
     private final BoolAnimator animatorSearchPageVisible = new BoolAnimator(ANIMATOR_ID_SEARCH_PAGE_VISIBLE,
             this, CubicBezierInterpolator.EASE_OUT_QUINT, 350);
@@ -704,8 +706,8 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         items.add(SettingCell.Factory.of(2, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_chat, getString(R.string.SettingsChat), getString(R.string.SettingsChatInfo)));
         items.add(SettingCell.Factory.of(3, IconBackgroundColors.GREEN.top, IconBackgroundColors.GREEN.bottom, R.drawable.settings_privacy, getString(R.string.SettingsPrivacySecurity), getString(R.string.SettingsPrivacySecurityInfo)));
         items.add(SettingCell.Factory.of(4, IconBackgroundColors.CYAN.top, IconBackgroundColors.CYAN.bottom, R.drawable.msg_stories_stealth, getString(R.string.GhostMode), GhostModeController.getInstance(currentAccount).enabled ? getString(R.string.NotificationsOn) : getString(R.string.NotificationsOff)));
-        items.add(SettingCell.Factory.of(24, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.msg_secret, "Hidden Chats", getHiddenChatsOpeningLocation()));
-        items.add(SettingCell.Factory.of(25, IconBackgroundColors.BLUE_ALT.top, IconBackgroundColors.BLUE_ALT.bottom, R.drawable.outline_search_1_24, LocaleController.getString(R.string.SearchHideJoined), SharedConfig.searchHideJoined ? LocaleController.getString(R.string.NotificationsOn) : LocaleController.getString(R.string.NotificationsOff)));
+        items.add(SettingCell.Factory.of(ID_HIDDEN_CHATS, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.msg_secret, "Hidden Chats", getHiddenChatsOpeningLocation()));
+        items.add(SettingCell.Factory.of(ID_SEARCH_HIDE_JOINED, IconBackgroundColors.BLUE_ALT.top, IconBackgroundColors.BLUE_ALT.bottom, R.drawable.outline_search_1_24, LocaleController.getString(R.string.SearchHideJoined), SharedConfig.searchHideJoined ? LocaleController.getString(R.string.NotificationsOn) : LocaleController.getString(R.string.NotificationsOff)));
         items.add(SettingCell.Factory.of(5, IconBackgroundColors.RED.top, IconBackgroundColors.RED.bottom, R.drawable.settings_sounds, getString(R.string.SettingsNotifications), getString(R.string.SettingsNotificationsInfo)));
         items.add(SettingCell.Factory.of(6, IconBackgroundColors.BLUE_DEEP.top, IconBackgroundColors.BLUE_DEEP.bottom, R.drawable.settings_data, getString(R.string.SettingsData), getString(R.string.SettingsDataInfo)));
         items.add(SettingCell.Factory.of(7, IconBackgroundColors.BLUE_ALT.top, IconBackgroundColors.BLUE_ALT.bottom, R.drawable.settings_folders, getString(R.string.SettingsFolders), getString(R.string.SettingsFoldersInfo)));
@@ -836,10 +838,10 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             case 4:
                 presentSettingFragment(new GhostModeActivity());
                 break;
-            case 24:
+            case ID_HIDDEN_CHATS:
                 showHiddenChatsSettings();
                 break;
-            case 25:
+            case ID_SEARCH_HIDE_JOINED:
                 SharedConfig.toggleSearchHideJoined();
                 if (listView != null && listView.adapter != null) {
                     listView.adapter.update(true);
