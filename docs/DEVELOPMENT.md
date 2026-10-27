@@ -35,7 +35,7 @@ After completing the [build setup](BUILDING.md), compile the real Telegram class
 bash Tools/tests/run-local-repeats.sh
 ```
 
-The current suite reports 167 checks: 32 scheduling callback checks, 21 interval checks, 16 protocol checks, and 98 queue checks. It covers seven-occurrence queues, three rules producing 21 occurrences, restart without duplication, replenishment, cancellation, recovery, and errors. This is simulated transport coverage, not a live delivery or security audit.
+The current suite reports 240 checks: 32 scheduling callback checks, 18 passcode-flow checks, 55 Ghost Mode request checks, 21 interval checks, 16 protocol checks, and 98 queue checks. It covers seven-occurrence queues, three rules producing 21 occurrences, restart without duplication, replenishment, cancellation, recovery, and errors. Passcode checks execute the production success dispatcher and input-mode selection, covering hidden-chat callbacks, app settings, and Telegram's wallet authorization path. Request checks execute the production read/story guards and background-send flags with a recording transport, including one-shot read allowances and account isolation. This is simulated transport and UI-dispatch coverage, not a live delivery or security audit.
 
 For a quick compose-only check with Python 3 and a JDK, without Android SDK setup:
 
