@@ -1237,7 +1237,11 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
     public void onResume() {
         super.onResume();
         if (listViewAdapter != null) {
-            listViewAdapter.notifyDataSetChanged();
+            if (!sortByName) {
+                listViewAdapter.sortOnlineContacts();
+            } else {
+                listViewAdapter.notifyDataSetChanged();
+            }
         }
         getContactsController().reloadContactsStatusesMaybe(true);
     }
@@ -1367,11 +1371,11 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
             }
         } else if (id == NotificationCenter.updateInterfaces) {
             int mask = (Integer) args[0];
+            if ((mask & MessagesController.UPDATE_MASK_STATUS) != 0 && !sortByName && listViewAdapter != null) {
+                listViewAdapter.sortOnlineContacts();
+            }
             if ((mask & MessagesController.UPDATE_MASK_AVATAR) != 0 || (mask & MessagesController.UPDATE_MASK_NAME) != 0 || (mask & MessagesController.UPDATE_MASK_STATUS) != 0) {
                 updateVisibleRows(mask);
-            }
-            if ((mask & MessagesController.UPDATE_MASK_STATUS) != 0 && !sortByName && listViewAdapter != null) {
-                scheduleSort();
             }
         } else if (id == NotificationCenter.encryptedChatCreated) {
             if (createSecretChat && creatingChat) {
@@ -1385,23 +1389,6 @@ public class ContactsActivity extends BaseFragment implements FactorAnimator.Tar
             if (!creatingChat) {
                 removeSelfFromStack(true);
             }
-        }
-    }
-
-    boolean scheduled;
-    Runnable sortContactsRunnable = new Runnable() {
-        @Override
-        public void run() {
-            listViewAdapter.sortOnlineContacts();
-            scheduled = false;
-        }
-    };
-
-    private void scheduleSort() {
-        if (!scheduled) {
-            scheduled = true;
-            AndroidUtilities.cancelRunOnUIThread(sortContactsRunnable);
-            AndroidUtilities.runOnUIThread(sortContactsRunnable, 5000);
         }
     }
 

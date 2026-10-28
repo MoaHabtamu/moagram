@@ -39,6 +39,8 @@ The current suite reports 758 checks: 32 scheduling callback checks, 18 passcode
 
 The runner also executes 36 in-app update policy/signature checks and nine release-feed tests. These cover the daily reminder boundary, version/Android compatibility, URL restrictions, corrupted downloads, cryptographic signature verification, wrong signing identities, and release metadata mismatches. See [In-app updates](IN_APP_UPDATES.md).
 
+Contact sorting checks execute the production comparator and contact-screen status/resume handlers against mixed online, offline, private, approximate, bot, and missing-user states. They compare ordering with the actual contact-row Online condition, exercise live status changes and privacy-hint expiry, and preserve alphabetical mode. Run them independently with `python3 Tools/tests/test-contact-sorting.py`.
+
 For a quick compose-only check with Python 3 and a JDK, without Android SDK setup:
 
 ```bash
