@@ -4,7 +4,7 @@
 
 ## Telegram
 
-Moagram is an independent modification of [Telegram for Android](https://github.com/DrKLO/Telegram). The development source is based on Telegram 13.0.3 and requires Android 6.0 or later, matching upstream. Original Git history, copyright notices, and the repository's [GNU GPL v2 license](../LICENSE) are preserved.
+Moagram is an independent modification of [Telegram for Android](https://github.com/DrKLO/Telegram). The development source is based on Telegram 13.1.1 and requires Android 6.0 or later, matching upstream. Original Git history, copyright notices, and the repository's [GNU GPL v2 license](../LICENSE) are preserved.
 
 Moagram is not affiliated with or endorsed by Telegram. Its branding, package name, and custom behavior distinguish it from official releases. Telegram account, protocol, and server restrictions still apply.
 
@@ -52,6 +52,9 @@ is published; it becomes available to Moagram once the source is public.
 
 The daily workflow is enabled only for `MoaHabtamu/moagram`. Fork owners must
 deliberately change that repository guard before enabling their own checker.
+
+Moagram-only strings are kept in `TMessagesProj/src/main/res/values/moagram.xml`
+so new upstream strings can be appended without colliding with fork additions.
 
 ### GitHub configuration
 

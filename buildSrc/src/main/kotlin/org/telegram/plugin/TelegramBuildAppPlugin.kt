@@ -26,7 +26,7 @@ class TelegramBuildAppPlugin : Plugin<Project> {
             ) {
                 stringsXml.from(
                     telegramModule.fileTree("src/main/res/values") {
-                        include("strings.xml")
+                        include("strings.xml", "moagram.xml")
                     },
                     project.fileTree("src/main/res/values") {
                         include("strings.xml")

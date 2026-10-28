@@ -5,6 +5,7 @@ cd "$repeat_repo"
 python3 Tools/tests/test-schedule-callbacks.py
 python3 Tools/tests/test-passcode-flows.py
 python3 Tools/tests/test-ghost-requests.py
+python3 Tools/tests/test-photo-permissions.py
 repeat_sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 if [[ -z "$repeat_sdk" ]]; then
     repeat_sdk="$(sed -n 's/^sdk.dir=//p' local.properties)"
