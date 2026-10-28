@@ -7,7 +7,7 @@
   "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.4/Moagram-13.1.1-preview.4.apk",
   "sha256": "178a6641bdf108f86db5895e3ce1682a26156f840541375cddea293a46104c99",
   "size": 71010007,
-  "critical_below_version_code": 0,
+  "critical_below_version_code": 723739,
   "notes": "The startup splash screen now uses the app icon in both light and dark mode. Includes the contacts sorting fix from preview 3.\n",
-  "critical_message": ""
+  "critical_message": "Test critical-update reminder: Moagram preview 4 is available. Please review the update to test the reminder and update flow."
 }
