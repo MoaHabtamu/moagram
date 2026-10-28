@@ -170,6 +170,7 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
         themeFrameLayout.addView(themeIconView, LayoutHelper.createFrame(28, 28, Gravity.CENTER));
 
         int themeMargin = 4;
+        TextView updateLink = new TextView(context);
         frameContainerView = new FrameLayout(context) {
 
             @Override
@@ -199,9 +200,15 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
                     marginLayoutParams.topMargin = newTopMargin;
                     themeFrameLayout.requestLayout();
                 }
+                if (updateLink.getLayoutParams() instanceof FrameLayout.LayoutParams) {
+                    FrameLayout.LayoutParams linkParams = (FrameLayout.LayoutParams) updateLink.getLayoutParams();
+                    if (linkParams.topMargin != newTopMargin) {
+                        linkParams.topMargin = newTopMargin;
+                        updateLink.requestLayout();
+                    }
+                }
             }
         };
-        TextView updateLink = new TextView(context);
         updateLink.setText(LocaleController.getString(R.string.MoagramUpdates));
         updateLink.setTextSize(15);
         updateLink.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlueText));
@@ -434,6 +441,7 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
         });
 
         frameContainerView.addView(themeFrameLayout, LayoutHelper.createFrame(64, 64, Gravity.TOP | Gravity.RIGHT, 0, themeMargin, themeMargin, 0));
+        updateLink.bringToFront();
 
         fragmentView = scrollView;
 
