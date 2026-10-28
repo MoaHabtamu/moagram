@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "package_name": "org.moagram.messenger.web",
-  "version_code": 723719,
-  "version_name": "13.1.1-Moagram.2",
+  "version_code": 723729,
+  "version_name": "13.1.1-Moagram.3",
   "min_sdk": 23,
-  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.2/Moagram-13.1.1-preview.2.apk",
-  "sha256": "255d37395b38bd21112ce4aed254910d63255e7c1436adb1fe06aaabbb50bc6f",
-  "size": 71009755,
+  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.3/Moagram-13.1.1-preview.3.apk",
+  "sha256": "5f1a3dfd5c3fa28bdfd3753be6d95492eae4aef05eec7246fc3fdbf8bbb817bd",
+  "size": 71010066,
   "critical_below_version_code": 0,
-  "notes": "Moagram 13.1.1 preview 2 — optional in-app updates",
+  "notes": "Fix contacts sorted by last seen: contacts shown as Online stay together at the top, and status changes refresh the order immediately. Offline contacts follow by last seen.\n",
   "critical_message": ""
 }
