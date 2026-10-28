@@ -116,56 +116,49 @@ public class ContactsAdapter extends RecyclerListView.SectionsAdapter {
     }
 
     public void sortOnlineContacts() {
-        if (onlineContacts == null) {
+        if (sortType != SORT_TYPE_BY_TIME || onlineContacts == null) {
+            notifyDataSetChanged();
             return;
         }
         try {
             int currentTime = ConnectionsManager.getInstance(currentAccount).getCurrentTime();
             MessagesController messagesController = MessagesController.getInstance(currentAccount);
-            Collections.sort(onlineContacts, (o1, o2) -> {
-                TLRPC.User user1 = messagesController.getUser(o2.user_id);
-                TLRPC.User user2 = messagesController.getUser(o1.user_id);
-                int status1 = 0;
-                int status2 = 0;
-                if (user1 != null) {
-                    if (user1.self) {
-                        status1 = currentTime + 50000;
-                    } else if (user1.status != null) {
-                        status1 = user1.status.expires;
-                    }
-                }
-                if (user2 != null) {
-                    if (user2.self) {
-                        status2 = currentTime + 50000;
-                    } else if (user2.status != null) {
-                        status2 = user2.status.expires;
-                    }
-                }
-                if (status1 > 0 && status2 > 0) {
-                    if (status1 > status2) {
-                        return 1;
-                    } else if (status1 < status2) {
-                        return -1;
-                    }
-                    return 0;
-                } else if (status1 < 0 && status2 < 0) {
-                    if (status1 > status2) {
-                        return 1;
-                    } else if (status1 < status2) {
-                        return -1;
-                    }
-                    return 0;
-                } else if (status1 < 0 && status2 > 0 || status1 == 0 && status2 != 0) {
-                    return -1;
-                } else if (status2 < 0 && status1 > 0 || status2 == 0 && status1 != 0) {
-                    return 1;
-                }
-                return 0;
-            });
+            long selfId = UserConfig.getInstance(currentAccount).getClientUserId();
+            // Snapshot keys: recent-activity privacy hints can change on another thread.
+            LongSparseArray<Long> statusKeys = new LongSparseArray<>(onlineContacts.size());
+            for (TLRPC.TL_contact contact : onlineContacts) {
+                statusKeys.put(contact.user_id, statusSortKey(messagesController.getUser(contact.user_id),
+                        selfId, currentTime, messagesController.onlinePrivacy.containsKey(contact.user_id)));
+            }
+            Collections.sort(onlineContacts, (o1, o2) ->
+                    Long.compare(statusKeys.get(o2.user_id), statusKeys.get(o1.user_id)));
             notifyDataSetChanged();
         } catch (Exception e) {
             FileLog.e(e);
         }
+    }
+
+    private static long statusSortKey(TLRPC.User user, long selfId, int currentTime, boolean privacyOnline) {
+        if (user == null) {
+            return Long.MIN_VALUE;
+        }
+        // Match UserCell's Online label, including contacts whose exact last seen is private.
+        if (!user.bot && (user.id == selfId || privacyOnline || user.status != null
+                && (user.status instanceof TLRPC.TL_userStatusOnline || user.status.expires > currentTime))) {
+            return Long.MAX_VALUE;
+        }
+        if (user.status == null) {
+            return Long.MIN_VALUE;
+        }
+        // Relative statuses may arrive without expires, or with the by_me sentinel values.
+        if (user.status instanceof TLRPC.TL_userStatusRecently) {
+            return -100;
+        } else if (user.status instanceof TLRPC.TL_userStatusLastWeek) {
+            return -101;
+        } else if (user.status instanceof TLRPC.TL_userStatusLastMonth) {
+            return -102;
+        }
+        return user.status.expires == 0 ? Long.MIN_VALUE : user.status.expires;
     }
 
     public Object getItem(int section, int position) {

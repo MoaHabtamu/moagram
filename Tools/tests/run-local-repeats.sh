@@ -6,6 +6,7 @@ python3 Tools/tests/test-schedule-callbacks.py
 python3 Tools/tests/test-passcode-flows.py
 python3 Tools/tests/test-ghost-requests.py
 python3 Tools/tests/test-photo-permissions.py
+python3 Tools/tests/test-contact-sorting.py
 python3 Tools/tests/test-moagram-updates.py
 python3 Tools/tests/test-update-feed.py
 repeat_sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
