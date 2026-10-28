@@ -4,7 +4,7 @@
 
 ## Download and verify
 
-Open [Moagram Releases](https://github.com/MoaHabtamu/moagram/releases) and select a release. Read its notes, then download the `.apk` asset and `SHA256SUMS.txt`. The earlier Telegram 12.10.1 preview supports Android 5.0 and later and includes ARM and x86 architectures. The updated development source uses Telegram 13.0.3 and requires Android 6.0 or later; source updates do not replace already published preview APKs.
+Open [Moagram Releases](https://github.com/MoaHabtamu/moagram/releases) and select a release. Read its notes, then download the `.apk` asset and `SHA256SUMS.txt`. The earlier Telegram 12.10.1 preview supports Android 5.0 and later and includes ARM and x86 architectures. The updated development source uses Telegram 13.1.1 and requires Android 6.0 or later; source updates do not replace already published preview APKs.
 
 On Linux, put both downloaded files in the same directory and run:
 

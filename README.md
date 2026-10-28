@@ -14,7 +14,7 @@
 
 Moagram builds on [Telegram for Android](https://github.com/DrKLO/Telegram) with features for everyday scheduling, chat organization, and control over local app behavior. It connects to Telegram using your Telegram account. It is an independent project and is not affiliated with or endorsed by Telegram.
 
-The development source is based on Telegram **13.0.3** and requires **Android 6.0+**, matching the new upstream minimum. Published preview APKs may use an earlier base; check each release's notes. This is an early community project: the repeat queue has automated regression coverage, while the 13.0.3 update still needs broader device and privacy testing.
+The development source is based on Telegram **13.1.1** and requires **Android 6.0+**, matching the new upstream minimum. Published preview APKs may use an earlier base; check each release's notes. This is an early community project: the repeat queue has automated regression coverage, while the 13.1.1 update still needs broader device and privacy testing.
 
 ## Features
 
