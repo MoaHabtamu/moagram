@@ -5,6 +5,8 @@ Run from the repository root in GitHub Actions. No third-party Python dependenci
 """
 import json
 import os
+from pathlib import Path
+import re
 import subprocess
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -49,6 +51,64 @@ def summary(message):
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as output:
             output.write(message + "\n")
+
+
+def stop_update(message):
+    summary(message)
+    print(f"::error::{message}")
+    raise SystemExit(1)
+
+
+def property_entries(text):
+    """Accept only unambiguous, single-line key=value properties."""
+    entries = {}
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith(("#", "!")):
+            continue
+        match = re.fullmatch(r"([A-Za-z0-9_.-]+)=(.*)", line)
+        if not match or "\\" in line or match[1] in entries:
+            return None
+        entries[match[1]] = match[2]
+    return entries
+
+
+def resolve_properties():
+    """Merge independent keys, refusing any key changed differently on both sides.
+
+    Git treats adjacent version/package edits as one conflicting text block.
+    Use its three index stages rather than special-casing version or package values.
+    Unsupported property syntax is left for a maintainer to resolve.
+    """
+    stages = [git("show", f":{stage}:gradle.properties", check=False) for stage in (1, 2, 3)]
+    if any(stage.returncode for stage in stages):
+        return False
+    parsed = [property_entries(stage.stdout) for stage in stages]
+    if any(entries is None for entries in parsed):
+        return False
+    base, ours, theirs = parsed
+    missing = object()
+    merged = {}
+    for key in base.keys() | ours.keys() | theirs.keys():
+        before, local, remote = (entries.get(key, missing) for entries in parsed)
+        if local == remote or remote == before:
+            merged[key] = local
+        elif local == before:
+            merged[key] = remote
+        else:
+            return False
+    # Keep upstream's current comments/order and append any Moagram-only keys.
+    lines = []
+    for line in stages[2].stdout.splitlines():
+        match = re.fullmatch(r"([A-Za-z0-9_.-]+)=(.*)", line)
+        if not match or line.lstrip().startswith(("#", "!")):
+            lines.append(line)
+        elif merged[match[1]] is not missing:
+            lines.append(f"{match[1]}={merged[match[1]]}")
+    lines.extend(f"{key}={merged[key]}" for key in ours
+                 if key not in theirs and merged[key] is not missing)
+    Path("gradle.properties").write_text("\n".join(lines) + "\n")
+    git("add", "gradle.properties")
+    return True
 
 
 def conflict_issue():
@@ -108,12 +168,15 @@ branding, API configuration, signing, and version information before release.
 
 
 def merge_candidate(starting, base, target):
-    """Keep existing maintainer commits and merge normally, never using ours/theirs."""
+    """Keep maintainer commits, stopping on conflicts except independent properties."""
     git("switch", "--detach", starting)
     for revision in (base, target):
         result = git("merge", "--no-edit", "--no-ff", revision, check=False)
         if result.returncode:
             conflicts = git("diff", "--name-only", "--diff-filter=U").stdout.splitlines()
+            if conflicts == ["gradle.properties"] and resolve_properties():
+                git("commit", "--no-edit")
+                continue
             git("merge", "--abort", check=False)
             if not conflicts:
                 raise RuntimeError(result.stderr or result.stdout)
@@ -155,14 +218,13 @@ def main():
         closed_query = urlencode({"state": "closed", "head": f"{owner}:{BRANCH}", "base": BASE})
         closed = api("GET", f"pulls?{closed_query}") if not pulls else []
         if not pulls and closed and not ancestor(branch_sha, base_sha):
-            summary("Update branch has a closed, unmerged PR. Reopen it or delete the branch to resume.")
-            return
+            stop_update("Update branch has a closed, unmerged PR. Reopen it or delete the branch to resume.")
         starting = branch_sha
 
     conflicts = merge_candidate(starting, base_sha, target)
     if conflicts:
         report_conflicts(target, version, starting, conflicts, base_sha)
-        return
+        stop_update("Telegram update blocked by merge conflicts. See the conflict issue linked in this run's summary.")
     candidate = git("rev-parse", "HEAD").stdout.strip()
     # A regular push rejects concurrent/manual changes instead of overwriting them.
     git("push", "origin", f"HEAD:refs/heads/{BRANCH}")

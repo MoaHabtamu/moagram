@@ -34,12 +34,17 @@ is published; it becomes available to Moagram once the source is public.
 - If the upstream commit is already in Moagram's `master`, nothing changes.
 - Otherwise, the checker tries ordinary merges into `codex/telegram-upstream`,
   retaining Moagram commits and any maintainer fixes already on that branch.
+  If only `gradle.properties` conflicts, it merges independent keys using Git's
+  three versions of the file. This lets Telegram version changes coexist with
+  Moagram's package settings. Different edits to the same key, duplicate keys,
+  or unsupported property syntax still require manual resolution.
 - A successful merge opens a **draft pull request**. The same workflow calls
   **Android checks** directly on the exact candidate commit, compiling Java,
   running the repeat regression suite, and building the standalone APK. This
   works without relying on another workflow being triggered by the bot's PR.
 - Conflicts abort the merge and open or update one issue with the affected files
-  and recovery commands. Unchanged conflicts do not produce another notification.
+  and recovery commands. The workflow **fails** so blocked updates cannot appear
+  as successful checks. Unchanged conflicts do not produce another issue notification.
   After resolving and pushing, rerun the checker. A successful candidate closes
   the conflict issue; compilation or device testing may still find problems.
 - Pushes use normal fast-forward protection. The workflow never force-pushes,
@@ -76,6 +81,7 @@ Merge update PRs using **Create a merge commit**, preserving Telegram's ancestry
 Squashing or rebasing the update discards that relationship and can cause repeat
 update attempts. Closing an unmerged update PR pauses that branch: reopen it to
 continue, or delete the branch to let the next run start again from `master`.
+The checker reports a failure while an unmerged PR is deliberately closed.
 To pause all checks, disable **Check Telegram updates** in Actions.
 
 The implementation is in [`Tools/upstream/sync-telegram.py`](../Tools/upstream/sync-telegram.py).
