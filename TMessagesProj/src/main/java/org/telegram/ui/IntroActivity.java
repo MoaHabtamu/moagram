@@ -201,6 +201,17 @@ public class IntroActivity extends BaseFragment implements NotificationCenter.No
                 }
             }
         };
+        TextView updateLink = new TextView(context);
+        updateLink.setText(LocaleController.getString(R.string.MoagramUpdates));
+        updateLink.setTextSize(15);
+        updateLink.setTextColor(getThemedColor(Theme.key_windowBackgroundWhiteBlueText));
+        updateLink.setGravity(Gravity.CENTER);
+        updateLink.setPadding(dp(12), 0, dp(12), 0);
+        FrameLayout.LayoutParams updateParams = new FrameLayout.LayoutParams(-2, dp(48), Gravity.TOP | Gravity.LEFT);
+        updateParams.topMargin = AndroidUtilities.statusBarHeight + dp(4);
+        updateParams.leftMargin = dp(4);
+        frameContainerView.addView(updateLink, updateParams);
+        updateLink.setOnClickListener(v -> presentFragment(new MoagramUpdatesActivity()));
         scrollView.addView(frameContainerView, LayoutHelper.createScroll(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.LEFT | Gravity.TOP));
 
         darkThemeDrawable = new RLottieDrawable(R.raw.sun, dp(28), dp(28), true, null);

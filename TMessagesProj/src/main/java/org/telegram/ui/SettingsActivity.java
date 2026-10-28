@@ -162,6 +162,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     private static final int ANIMATOR_ID_SEARCH_PAGE_VISIBLE = 0;
     private static final int ID_HIDDEN_CHATS = 10001;
     private static final int ID_SEARCH_HIDE_JOINED = 10002;
+    private static final int ID_MOAGRAM_UPDATES = 10003;
 
     private final BoolAnimator animatorSearchPageVisible = new BoolAnimator(ANIMATOR_ID_SEARCH_PAGE_VISIBLE,
             this, CubicBezierInterpolator.EASE_OUT_QUINT, 350);
@@ -766,6 +767,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
             items.add(UItem.asShadow(null));
 
         items.add(UItem.asHeader(getString(R.string.SettingsHelp)));
+        items.add(SettingCell.Factory.of(ID_MOAGRAM_UPDATES, IconBackgroundColors.BLUE.top, IconBackgroundColors.BLUE.bottom, R.drawable.settings_devices, getString(R.string.MoagramUpdates), getString(R.string.MoagramCheckUpdates)));
         items.add(SettingCell.Factory.of(17, IconBackgroundColors.ORANGE.top, IconBackgroundColors.ORANGE.bottom, R.drawable.settings_ask, getString(R.string.AskAQuestion)));
         items.add(SettingCell.Factory.of(18, IconBackgroundColors.BLUE_LIGHT.top, IconBackgroundColors.BLUE_LIGHT.bottom, R.drawable.settings_faq, getString(R.string.TelegramFAQ)));
         items.add(SettingCell.Factory.of(23, IconBackgroundColors.PURPLE.top, IconBackgroundColors.PURPLE.bottom, R.drawable.settings_features, getString(R.string.TelegramFeatures)));
@@ -856,6 +858,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 break;
             case 4:
                 presentSettingFragment(new GhostModeActivity());
+                break;
+            case ID_MOAGRAM_UPDATES:
+                presentSettingFragment(new MoagramUpdatesActivity());
                 break;
             case ID_HIDDEN_CHATS:
                 showHiddenChatsSettings();
