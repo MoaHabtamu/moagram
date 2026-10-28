@@ -131,7 +131,10 @@ android {
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             outputFileName = "app.apk"
-            output.versionCodeOverride = defaultConfig.versionCode * 10 + variant.productFlavors.get(0).abiVersionCode
+            // Reserve a fork revision digit without editing Telegram's version properties.
+            def moagramRevision = Integer.parseInt(MOAGRAM_VERSION_REVISION)
+            if (moagramRevision < 0 || moagramRevision > 9) throw new GradleException('Moagram revision must be 0..9')
+            output.versionCodeOverride = defaultConfig.versionCode * 100 + moagramRevision * 10 + variant.productFlavors.get(0).abiVersionCode
         }
     }
 
@@ -145,7 +148,7 @@ android {
     defaultConfig {
         minSdkVersion 23
         targetSdkVersion 36
-        versionName APP_VERSION_NAME
+        versionName APP_VERSION_NAME + '-Moagram.' + (Integer.parseInt(MOAGRAM_VERSION_REVISION) + 1)
         ndkVersion "27.2.12479018"
 
         multiDexEnabled true

@@ -31,7 +31,9 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
-      - run: python3 Tools/tests/test-upstream-sync.py
+      - run: |
+          python3 Tools/tests/test-upstream-sync.py
+          python3 Tools/tests/test-update-feed.py
 
   android:
     runs-on: ubuntu-24.04

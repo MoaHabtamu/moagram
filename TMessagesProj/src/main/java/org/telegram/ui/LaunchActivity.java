@@ -6079,6 +6079,11 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     private boolean firstAppUpdateCheck = true;
     public void checkAppUpdate(boolean force, Browser.Progress progress) {
+        if (org.telegram.messenger.MoagramUpdateController.supported()) {
+            if (progress != null) progress.end();
+            if (force) presentFragment(new MoagramUpdatesActivity());
+            return;
+        }
         if (!BuildVars.CHECK_UPDATES) {
             if (progress != null) {
                 progress.end();
@@ -6862,6 +6867,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @Override
     protected void onPause() {
         super.onPause();
+        org.telegram.messenger.MoagramUpdateController.getInstance().onActivityPaused(this);
         isResumed = false;
         closeHiddenChatsOnBackground(actionBarLayout);
         closeHiddenChatsOnBackground(rightActionBarLayout);
@@ -7191,6 +7197,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         } else if (BuildVars.CHECK_UPDATES && SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
             showUpdateActivity(UserConfig.selectedAccount, SharedConfig.pendingAppUpdate, true);
         }
+        org.telegram.messenger.MoagramUpdateController.getInstance().checkCritical(this);
         if (BuildVars.CHECK_UPDATES) {
             checkAppUpdate(false, null);
         }

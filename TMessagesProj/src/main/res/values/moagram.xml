@@ -73,4 +73,27 @@
     <string name="LocalRepeatRetry">Retry Scheduling</string>
     <string name="LocalRepeatUnsupported">Free repeats support single text messages, photos, videos, files, stickers, contacts, locations and single forwarded messages. Paid messages, rich articles, polls, albums, self-destructing media and other special message types are not supported. Choose Never to schedule once.</string>
     <string name="LocalRepeatStorageFailed">Moagram could not save this repeat on your device. Free some storage and try again.</string>
+    <string name="MoagramUpdates">Moagram Updates</string>
+    <string name="MoagramCheckUpdates">Check for updates</string>
+    <string name="MoagramInstalledVersion">Installed version: %1$s</string>
+    <string name="MoagramUpdateInitial">Check for a new Moagram release when you are ready.</string>
+    <string name="MoagramCheckingUpdates">Checking for updates…</string>
+    <string name="MoagramUpdateCurrent">You have the latest available version.</string>
+    <string name="MoagramUpdateAvailable">Moagram %1$s is available.</string>
+    <string name="MoagramUpdateAndroidRequired">The new release requires a newer Android version.</string>
+    <string name="MoagramUpdateCheckFailed">Could not check for updates. Check your connection and try again.</string>
+    <string name="MoagramDownloadUpdate">Download update</string>
+    <string name="MoagramCancelDownload">Cancel download</string>
+    <string name="MoagramInstallUpdate">Install update</string>
+    <string name="MoagramDownloadingUpdate">Downloading update: %1$d%%</string>
+    <string name="MoagramUpdateReady">The update is verified and ready to install. Android may ask you to allow updates from Moagram. Return here and tap Install update after granting permission.</string>
+    <string name="MoagramUpdateDownloadFailed">The update could not be downloaded or verified. Check your connection and free storage, then try again.</string>
+    <string name="MoagramUpdateInstallFailed">Could not open Android’s installer. Check that installing updates from Moagram is allowed, then try again.</string>
+    <string name="MoagramUpdateUnsupported">In-app updates are available for the Moagram standalone distribution.</string>
+    <string name="MoagramUpdateConsentInfo">Regular updates are checked only when you ask. Critical notices may appear at most once a day. Nothing is downloaded until you choose Download update; Android will ask you to confirm installation. Keep Moagram open while downloading.</string>
+    <string name="MoagramCriticalUpdate">Important Moagram update</string>
+    <string name="MoagramCriticalUpdateInfo">An important update is available for your version of Moagram.</string>
+    <string name="MoagramCriticalReminderInfo">You can continue using Moagram and review this later. This reminder appears at most once a day.</string>
+    <string name="MoagramReviewUpdate">Review update</string>
+    <string name="MoagramUpdateLater">Later</string>
 </resources>

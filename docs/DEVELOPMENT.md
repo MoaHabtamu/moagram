@@ -37,6 +37,8 @@ bash Tools/tests/run-local-repeats.sh
 
 The current suite reports 758 checks: 32 scheduling callback checks, 18 passcode-flow checks, 55 Ghost Mode request checks, 518 photo-permission checks, 21 interval checks, 16 protocol checks, and 98 queue checks. It covers seven-occurrence queues, three rules producing 21 occurrences, restart without duplication, replenishment, cancellation, recovery, and errors. Passcode checks execute the production success dispatcher and input-mode selection, covering hidden-chat callbacks, app settings, and Telegram's wallet authorization path. Request checks execute the production read/story guards and background-send flags with a recording transport, including one-shot read allowances and account isolation. Photo checks execute the production sharing and secure-window conditions and rich-media parent lookup, covering protected articles with the Moagram saving option enabled and disabled. This is simulated transport and UI-dispatch coverage, not a live delivery or security audit.
 
+The runner also executes 36 in-app update policy/signature checks and nine release-feed tests. These cover the daily reminder boundary, version/Android compatibility, URL restrictions, corrupted downloads, cryptographic signature verification, wrong signing identities, and release metadata mismatches. See [In-app updates](IN_APP_UPDATES.md).
+
 For a quick compose-only check with Python 3 and a JDK, without Android SDK setup:
 
 ```bash

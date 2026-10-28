@@ -28,6 +28,8 @@ Install a newer APK over the existing app. Android requires a compatible version
 
 If Android reports a signature conflict, use a compatible build or back up any local-only data before considering an uninstall. Uninstalling clears app data, including local repeat rules and locally retained history. Telegram cloud chats and local-only app data have different storage behavior.
 
+For builds with the updater, use **Settings → Moagram Updates → Check for updates**. Downloading and installing require separate choices. Important-update reminders are dismissible and appear at most once a day. See [In-app updates](IN_APP_UPDATES.md).
+
 ## Find the custom features
 
 - **Settings → Ghost Mode:** account-specific presence and receipt controls, plus local retention options. See [Features](FEATURES.md).
