@@ -40,6 +40,53 @@ class RepositoryCase(unittest.TestCase):
 
 
 class MergeTests(RepositoryCase):
+    def merge_properties(self, base, ours, theirs):
+        common = self.commit("gradle.properties", base)
+        local = self.commit("gradle.properties", ours)
+        sync.git("switch", "--detach", common)
+        target = self.commit("gradle.properties", theirs)
+        return local, target, sync.merge_candidate(local, local, target)
+
+    def test_adjacent_version_and_package_changes_merge_by_key(self):
+        base = "APP_VERSION_CODE=1\nAPP_VERSION_NAME=1.0\nAPP_PACKAGE=org.telegram.messenger\n"
+        ours = base.replace("org.telegram", "org.moagram")
+        theirs = base.replace("CODE=1", "CODE=2").replace("NAME=1.0", "NAME=2.0")
+        local, target, conflicts = self.merge_properties(base, ours, theirs)
+        self.assertEqual(conflicts, [])
+        self.assertEqual(Path("gradle.properties").read_text(), theirs.replace("org.telegram", "org.moagram"))
+        self.assertTrue(sync.ancestor(local, "HEAD"))
+        self.assertTrue(sync.ancestor(target, "HEAD"))
+        self.assertEqual(sync.git("rev-parse", "master").stdout.strip(), local)
+        self.assertEqual(sync.git("status", "--porcelain").stdout, "")
+
+    def test_property_resolver_preserves_key_additions_and_deletions(self):
+        base = "A=old\nB=keep\nC=remove\n"
+        ours = "A=old\nB=local\nLOCAL=yes\n"
+        theirs = "A=new\nB=keep\nC=remove\nREMOTE=yes\n"
+        _, _, conflicts = self.merge_properties(base, ours, theirs)
+        self.assertEqual(conflicts, [])
+        self.assertEqual(sync.property_entries(Path("gradle.properties").read_text()),
+                         {"A": "new", "B": "local", "LOCAL": "yes", "REMOTE": "yes"})
+
+    def test_property_resolver_refuses_conflicting_values(self):
+        local, _, conflicts = self.merge_properties("VERSION=1\n", "VERSION=2\n", "VERSION=3\n")
+        self.assertEqual(conflicts, ["gradle.properties"])
+        self.assertEqual(self.head(), local)
+        self.assertEqual(Path("gradle.properties").read_text(), "VERSION=2\n")
+        self.assertEqual(sync.git("status", "--porcelain").stdout, "")
+
+    def test_unsupported_properties_are_left_for_manual_resolution(self):
+        for text in ("A=1\nA=2\n", "A=first\\\n next\n", "A:value\n", " A=1\n", "A=escaped\\ value\n"):
+            with self.subTest(text=text):
+                self.assertIsNone(sync.property_entries(text))
+        base = "A=original\nB=original\n"
+        ours = "A=original\nA=duplicate\nB=local\n"
+        theirs = "A=upstream\nB=original\n"
+        local, _, conflicts = self.merge_properties(base, ours, theirs)
+        self.assertEqual(conflicts, ["gradle.properties"])
+        self.assertEqual(self.head(), local)
+        self.assertEqual(Path("gradle.properties").read_text(), ours)
+
     def test_merge_keeps_mods_and_upstream_ancestry(self):
         local = self.commit("moagram.txt", "repeats and privacy\n")
         sync.git("switch", "--detach", self.common)
@@ -167,7 +214,9 @@ class WorkflowTests(RepositoryCase):
         sync.git("switch", "master")
         with patch.object(sync, "api", side_effect=self.api) as api, \
                 patch.object(sync, "report_conflicts") as report:
-            sync.main()
+            with self.assertRaises(SystemExit) as stopped:
+                sync.main()
+            self.assertEqual(stopped.exception.code, 1)
         self.assertEqual(self.remote_head(), self.local)
         self.assertEqual(sync.git("ls-remote", self.origin, f"refs/heads/{sync.BRANCH}").stdout, "")
         self.assertFalse(Path(self.output).exists())
@@ -215,7 +264,9 @@ class WorkflowTests(RepositoryCase):
             return self.api(method, endpoint, data)
 
         with patch.object(sync, "api", side_effect=api):
-            sync.main()
+            with self.assertRaises(SystemExit) as stopped:
+                sync.main()
+            self.assertEqual(stopped.exception.code, 1)
         self.assertEqual(self.remote_head(sync.BRANCH), before)
         self.assertFalse(Path(self.output).exists())
 
