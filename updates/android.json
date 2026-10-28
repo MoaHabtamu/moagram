@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "package_name": "org.moagram.messenger.web",
-  "version_code": 72379,
-  "version_name": "13.1.1",
+  "version_code": 723719,
+  "version_name": "13.1.1-Moagram.2",
   "min_sdk": 23,
-  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.1/Moagram-13.1.1-preview.1.apk",
-  "sha256": "a544035bc4e2e335175e5566095dc913e58ff1355218fcdaa5e94c4d093cb420",
-  "size": 70932813,
+  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.2/Moagram-13.1.1-preview.2.apk",
+  "sha256": "255d37395b38bd21112ce4aed254910d63255e7c1436adb1fe06aaabbb50bc6f",
+  "size": 71009755,
   "critical_below_version_code": 0,
-  "notes": "Telegram 13.1.1 with Moagram customizations.",
+  "notes": "Moagram 13.1.1 preview 2 — optional in-app updates",
   "critical_message": ""
 }
