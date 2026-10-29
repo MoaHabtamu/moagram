@@ -1485,6 +1485,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 rightActionBarLayout.getView().setVisibility(View.VISIBLE);
             }
             NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.passcodeDismissed, view);
+            org.telegram.messenger.MoagramUpdateController.getInstance().onActivityResumed(this);
             try {
                 NotificationsController.getInstance(UserConfig.selectedAccount).showNotifications();
             } catch (Exception e) {
@@ -7197,6 +7198,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         } else if (BuildVars.CHECK_UPDATES && SharedConfig.pendingAppUpdate != null && SharedConfig.pendingAppUpdate.can_not_skip) {
             showUpdateActivity(UserConfig.selectedAccount, SharedConfig.pendingAppUpdate, true);
         }
+        org.telegram.messenger.MoagramUpdateController.getInstance().onActivityResumed(this);
         org.telegram.messenger.MoagramUpdateController.getInstance().checkCritical(this);
         if (BuildVars.CHECK_UPDATES) {
             checkAppUpdate(false, null);

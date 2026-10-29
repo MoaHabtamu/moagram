@@ -387,9 +387,12 @@ public class MainTabsActivity extends ViewPagerActivity implements NotificationC
         updateLayoutWrapper = new UpdateLayoutWrapper(context);
         contentView.addView(updateLayoutWrapper, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
 
-        updateLayout = ApplicationLoader.applicationLoaderInstance.takeUpdateLayout(getParentActivity(), updateLayoutWrapper);
-        if (updateLayout != null) {
-            updateLayout.updateAppUpdateViews(currentAccount, false);
+        if (org.telegram.messenger.MoagramUpdateController.supported()) {
+            updateLayoutWrapper.addView(new org.telegram.ui.Components.MoagramUpdateBar(context, getParentActivity(),
+                    () -> presentFragment(new MoagramUpdatesActivity())));
+        } else {
+            updateLayout = ApplicationLoader.applicationLoaderInstance.takeUpdateLayout(getParentActivity(), updateLayoutWrapper);
+            if (updateLayout != null) updateLayout.updateAppUpdateViews(currentAccount, false);
         }
 
         updateLayout();

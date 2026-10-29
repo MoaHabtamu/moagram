@@ -86,14 +86,23 @@
     <string name="MoagramCancelDownload">Cancel download</string>
     <string name="MoagramInstallUpdate">Install update</string>
     <string name="MoagramDownloadingUpdate">Downloading update: %1$d%%</string>
-    <string name="MoagramUpdateReady">The update is verified and ready to install. Android may ask you to allow updates from Moagram. Return here and tap Install update after granting permission.</string>
+    <string name="MoagramUpdateReady">Your update has been downloaded and verified. Tap Install update to finish in Android’s installer.</string>
     <string name="MoagramUpdateDownloadFailed">The update could not be downloaded or verified. Check your connection and free storage, then try again.</string>
     <string name="MoagramUpdateInstallFailed">Could not open Android’s installer. Check that installing updates from Moagram is allowed, then try again.</string>
     <string name="MoagramUpdateUnsupported">In-app updates are available for the Moagram standalone distribution.</string>
-    <string name="MoagramUpdateConsentInfo">Regular updates are checked only when you ask. Critical notices may appear at most once a day. Nothing is downloaded until you choose Download update; Android will ask you to confirm installation. Keep Moagram open while downloading.</string>
+    <string name="MoagramUpdateConsentInfo">You choose when to download. Keep Moagram open and continue chatting while it downloads. Android will ask you to confirm installation. Critical update reminders appear at most once a day.</string>
     <string name="MoagramCriticalUpdate">Important Moagram update</string>
     <string name="MoagramCriticalUpdateInfo">An important update is available for your version of Moagram.</string>
-    <string name="MoagramCriticalReminderInfo">You can continue using Moagram and review this later. This reminder appears at most once a day.</string>
+    <string name="MoagramCriticalReminderInfo">Tap Download update to start. You can keep using Moagram and follow progress at the bottom of the app. This reminder appears at most once a day.</string>
     <string name="MoagramReviewUpdate">Review update</string>
     <string name="MoagramUpdateLater">Later</string>
+    <string name="MoagramUpdateHeading">Keep Moagram up to date</string>
+    <string name="MoagramUpdateWhatsNew">What’s new</string>
+    <string name="MoagramDownloadContinue">You can leave this page and keep chatting. Follow your download at the bottom of Moagram.</string>
+    <string name="MoagramUpdateReadyTitle">Ready to install</string>
+    <string name="MoagramAllowInstall">Allow installation</string>
+    <string name="MoagramUpdatePermissionInfo">Your update is downloaded and verified, but Android hasn’t allowed Moagram to install it yet. Tap Allow installation, turn on “Allow from this source” for Moagram, then return. The installer will open automatically—no need to download again.</string>
+    <string name="MoagramPreparingInstall">Preparing installer…</string>
+    <string name="MoagramUpdateAttention">Update needs attention</string>
+    <string name="MoagramUpdateNeedsAttention">Update needs attention</string>
 </resources>

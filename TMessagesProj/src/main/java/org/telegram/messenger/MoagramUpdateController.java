@@ -26,20 +26,21 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** No background APK downloads. Only critical metadata is checked on foreground resumes. */
+/** Downloads start only after user consent; critical metadata is checked on foreground resumes. */
 public final class MoagramUpdateController {
     private static final MoagramUpdateController INSTANCE = new MoagramUpdateController();
     public static MoagramUpdateController getInstance() { return INSTANCE; }
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final CopyOnWriteArrayList<Runnable> listeners = new CopyOnWriteArrayList<>();
-    private boolean checking, criticalChecking, installing;
+    private boolean checking, criticalChecking, installing, restored;
+    private WeakReference<LaunchActivity> foreground = new WeakReference<>(null);
     private Download download;
     private MoagramUpdatePolicy policy, criticalPolicy;
     private long criticalFetchedAt;
     private File readyApk;
     private String error;
     private long bytes;
-    private AlertDialog criticalDialog;
+    private AlertDialog criticalDialog, installDialog;
     private static final class Download {
         volatile boolean cancelled;
         volatile HttpURLConnection connection;
@@ -65,13 +66,20 @@ public final class MoagramUpdateController {
     public boolean busy() { return checking || download != null || installing; }
     public boolean downloading() { return download != null; }
     public boolean checking() { return checking; }
+    public boolean installing() { return installing; }
+    public boolean needsInstallPermission() {
+        return Build.VERSION.SDK_INT >= 26 && !context().getPackageManager().canRequestPackageInstalls();
+    }
     public boolean ready() { return readyApk != null && readyApk.isFile(); }
     public long downloadedBytes() { return bytes; }
     public MoagramUpdatePolicy policy() { return policy; }
     public String error() { return error; }
     public void offer(MoagramUpdatePolicy update) {
         if (busy()) return;
-        if (policy == null || !policy.sha256.equals(update.sha256)) readyApk = null;
+        if (policy == null || !policy.sha256.equals(update.sha256)) {
+            readyApk = null;
+            prefs().edit().remove("ready_update").remove("pending_install").remove("ready_notice").apply();
+        }
         policy = update;
         error = null;
         changed();
@@ -110,12 +118,88 @@ public final class MoagramUpdateController {
                 if (body.size() + read > 65536) throw new IOException("Update metadata too large");
                 body.write(buffer, 0, read);
             }
-            JSONObject json = new JSONObject(body.toString("UTF-8"));
-            return new MoagramUpdatePolicy(json.getInt("schema_version"), json.getString("package_name"),
-                    json.getLong("version_code"), json.getString("version_name"), json.getInt("min_sdk"),
-                    json.getString("apk_url"), json.getString("sha256"), json.getLong("size"),
-                    json.getLong("critical_below_version_code"), json.getString("notes"), json.getString("critical_message"));
+            return parse(new JSONObject(body.toString("UTF-8")));
         } finally { connection.disconnect(); }
+    }
+    private MoagramUpdatePolicy parse(JSONObject json) throws Exception {
+        return new MoagramUpdatePolicy(json.getInt("schema_version"), json.getString("package_name"),
+                json.getLong("version_code"), json.getString("version_name"), json.getInt("min_sdk"),
+                json.getString("apk_url"), json.getString("sha256"), json.getLong("size"),
+                json.getLong("critical_below_version_code"), json.getString("notes"), json.getString("critical_message"));
+    }
+    private void saveReady(MoagramUpdatePolicy update) {
+        try {
+            JSONObject json = new JSONObject();
+            json.put("schema_version", 1).put("package_name", MoagramUpdatePolicy.PACKAGE)
+                    .put("version_code", update.versionCode).put("version_name", update.versionName)
+                    .put("min_sdk", update.minSdk).put("apk_url", update.apkUrl).put("sha256", update.sha256)
+                    .put("size", update.size).put("critical_below_version_code", update.criticalBelow)
+                    .put("notes", update.notes).put("critical_message", update.criticalMessage);
+            prefs().edit().putString("ready_update", json.toString()).putBoolean("ready_notice", true).apply();
+        } catch (Exception ignored) { }
+    }
+    public void onActivityResumed(LaunchActivity activity) {
+        if (!supported()) return;
+        foreground = new WeakReference<>(activity);
+        if (!restored) {
+            restored = true;
+            String saved = prefs().getString("ready_update", null);
+            if (saved != null && !busy() && policy == null) {
+                checking = true;
+                changed();
+                worker.execute(() -> {
+                    MoagramUpdatePolicy found = null;
+                    File file = null;
+                    try {
+                        found = parse(new JSONObject(saved));
+                        file = new File(context().getCacheDir(), "moagram-updates/" + found.sha256 + ".apk");
+                        verify(file, found);
+                    } catch (Exception ignored) { found = null; }
+                    final MoagramUpdatePolicy update = found;
+                    final File apk = file;
+                    AndroidUtilities.runOnUIThread(() -> {
+                        checking = false;
+                        if (update != null) {
+                            policy = update;
+                            readyApk = apk;
+                            bytes = update.size;
+                        } else {
+                            prefs().edit().remove("ready_update").remove("pending_install").remove("ready_notice").apply();
+                        }
+                        changed();
+                        resumeInstall();
+                    });
+                });
+            }
+        }
+        changed();
+        resumeInstall();
+    }
+    private void resumeInstall() {
+        LaunchActivity activity = foreground.get();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()
+                || ApplicationLoader.mainInterfacePaused || SharedConfig.appLocked || busy() || !ready()) return;
+        if (prefs().getBoolean("pending_install", false) && !needsInstallPermission()) install(activity);
+        else if (prefs().getBoolean("ready_notice", false)) showReadyPrompt();
+    }
+    private void showReadyPrompt() {
+        LaunchActivity activity = foreground.get();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()
+                || ApplicationLoader.mainInterfacePaused || SharedConfig.appLocked || !ready() || installDialog != null) return;
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        builder.setTitle(LocaleController.getString(R.string.MoagramUpdateReadyTitle));
+        builder.setMessage(LocaleController.getString(needsInstallPermission()
+                ? R.string.MoagramUpdatePermissionInfo : R.string.MoagramUpdateReady));
+        builder.setPositiveButton(LocaleController.getString(needsInstallPermission()
+                ? R.string.MoagramAllowInstall : R.string.MoagramInstallUpdate), (dialog, which) -> install(activity));
+        builder.setNegativeButton(LocaleController.getString(R.string.MoagramUpdateLater), null);
+        builder.setOnDismissListener(dialog -> installDialog = null);
+        installDialog = builder.create();
+        installDialog.setOwnerActivity(activity);
+        try {
+            installDialog.show();
+            prefs().edit().putBoolean("ready_notice", false).apply();
+        } catch (Exception ignored) { installDialog = null; }
     }
     public void check() {
         if (busy() || !supported()) return;
@@ -159,7 +243,8 @@ public final class MoagramUpdateController {
     private void prompt(LaunchActivity activity, MoagramUpdatePolicy update) {
         long now = System.currentTimeMillis();
         if (activity.isFinishing() || activity.isDestroyed() || ApplicationLoader.mainInterfacePaused
-                || SharedConfig.appLocked || busy() || criticalDialog != null
+                || SharedConfig.appLocked || busy() || (ready() && policy.versionCode >= update.versionCode)
+                || criticalDialog != null || installDialog != null
                 || !update.criticalFor(installedCode()) || !update.compatible(Build.VERSION.SDK_INT)
                 || !MoagramUpdatePolicy.intervalElapsed(now, prefs().getLong("last_critical_prompt", 0), MoagramUpdatePolicy.REMINDER_INTERVAL)) return;
         BaseFragment fragment = LaunchActivity.getLastFragment();
@@ -168,7 +253,10 @@ public final class MoagramUpdateController {
         builder.setTitle(LocaleController.getString(R.string.MoagramCriticalUpdate));
         builder.setMessage((update.criticalMessage.isEmpty() ? LocaleController.getString(R.string.MoagramCriticalUpdateInfo) : update.criticalMessage)
                 + "\n\n" + LocaleController.getString(R.string.MoagramCriticalReminderInfo));
-        builder.setPositiveButton(LocaleController.getString(R.string.MoagramReviewUpdate), (dialog, which) -> fragment.presentFragment(new MoagramUpdatesActivity(update)));
+        builder.setPositiveButton(LocaleController.getString(R.string.MoagramDownloadUpdate), (dialog, which) -> {
+            offer(update);
+            download();
+        });
         builder.setNegativeButton(LocaleController.getString(R.string.MoagramUpdateLater), null);
         builder.setOnDismissListener(dialog -> criticalDialog = null);
         criticalDialog = builder.create();
@@ -180,6 +268,8 @@ public final class MoagramUpdateController {
     }
     public void onActivityPaused(Activity activity) {
         if (criticalDialog != null && criticalDialog.getOwnerActivity() == activity) criticalDialog.dismiss();
+        if (installDialog != null && installDialog.getOwnerActivity() == activity) installDialog.dismiss();
+        if (foreground.get() == activity) foreground.clear();
     }
     private List<byte[]> installedSigners() throws Exception {
         PackageManager manager = context().getPackageManager();
@@ -256,8 +346,13 @@ public final class MoagramUpdateController {
                 if (download != job) return;
                 download = null;
                 readyApk = verified;
+                if (verified != null) {
+                    bytes = update.size;
+                    saveReady(update);
+                }
                 error = verified == null ? LocaleController.getString(R.string.MoagramUpdateDownloadFailed) : null;
                 changed();
+                if (verified != null) showReadyPrompt();
             });
         });
     }
@@ -272,10 +367,14 @@ public final class MoagramUpdateController {
         changed();
     }
     public void install(Activity activity) {
-        if (busy() || !ready() || policy == null) return;
-        if (Build.VERSION.SDK_INT >= 26 && !context().getPackageManager().canRequestPackageInstalls()) {
+        if (activity == null || activity.isFinishing() || activity.isDestroyed() || busy() || !ready() || policy == null) return;
+        error = null;
+        if (needsInstallPermission()) {
+            // Remember the user's install request across Settings and process recreation.
+            prefs().edit().putBoolean("pending_install", true).apply();
             try { activity.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context().getPackageName()))); }
-            catch (Exception ignored) { error = LocaleController.getString(R.string.MoagramUpdateInstallFailed); changed(); }
+            catch (Exception ignored) { error = LocaleController.getString(R.string.MoagramUpdateInstallFailed); }
+            changed();
             return;
         }
         File file = readyApk;
@@ -290,14 +389,21 @@ public final class MoagramUpdateController {
             final boolean verified = valid;
             AndroidUtilities.runOnUIThread(() -> {
                 installing = false;
-                Activity current = reference.get();
-                if (!verified) { readyApk = null; error = LocaleController.getString(R.string.MoagramUpdateDownloadFailed); }
-                else if (current != null && !current.isFinishing() && !current.isDestroyed()) {
+                Activity current = foreground.get();
+                if (current == null) current = reference.get();
+                if (!verified) {
+                    readyApk = null;
+                    prefs().edit().remove("ready_update").remove("pending_install").remove("ready_notice").apply();
+                    error = LocaleController.getString(R.string.MoagramUpdateDownloadFailed);
+                }
+                else if (current != null && !current.isFinishing() && !current.isDestroyed()
+                        && !ApplicationLoader.mainInterfacePaused && !SharedConfig.appLocked) {
                     try {
                         Uri uri = FileProvider.getUriForFile(current, context().getPackageName() + ".provider", file);
                         Intent intent = new Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
                                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         current.startActivity(intent);
+                        prefs().edit().remove("pending_install").apply();
                     } catch (Exception ignored) { error = LocaleController.getString(R.string.MoagramUpdateInstallFailed); }
                 }
                 changed();
