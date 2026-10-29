@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "package_name": "org.moagram.messenger.web",
-  "version_code": 723739,
-  "version_name": "13.1.1-Moagram.4",
+  "version_code": 723749,
+  "version_name": "13.1.1-Moagram.5",
   "min_sdk": 23,
-  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.4/Moagram-13.1.1-preview.4.apk",
-  "sha256": "178a6641bdf108f86db5895e3ce1682a26156f840541375cddea293a46104c99",
-  "size": 71010007,
-  "critical_below_version_code": 723739,
-  "notes": "The startup splash screen now uses the app icon in both light and dark mode. Includes the contacts sorting fix from preview 3.\n",
-  "critical_message": "Test critical-update reminder: Moagram preview 4 is available. Please review the update to test the reminder and update flow."
+  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.5/Moagram-13.1.1-preview.5.apk",
+  "sha256": "9026e3c4ad81e86de085e6fb26bb84186a3e9f765691ca626156c578c1e67457",
+  "size": 71012039,
+  "critical_below_version_code": 723749,
+  "notes": "Critical update: improved download and installation flow.\n\n• Critical alerts start downloads directly, without opening the manual update page.\n• Follow download progress and cancel from the bottom of the main UI.\n• A redesigned update page shows release notes, percentage, and downloaded size.\n• Moagram explains Android installation permissions and opens the installer when you grant permission and return.\n• Verified downloads and pending installation requests survive app restarts.\n",
+  "critical_message": "An important update fixes download progress and Android installation-permission handling. Please update to Moagram preview 5 for the improved update experience."
 }
