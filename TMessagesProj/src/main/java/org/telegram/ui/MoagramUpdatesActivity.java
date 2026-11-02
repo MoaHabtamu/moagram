@@ -62,7 +62,8 @@ public class MoagramUpdatesActivity extends BaseFragment {
         ScrollView scroll = new ScrollView(context);
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
-        root.addView(scroll, LayoutHelper.createLinear(-1, 0, 1));
+        // A float selects weight; an int selects gravity and leaves the scroll area at zero height.
+        root.addView(scroll, LayoutHelper.createLinear(-1, 0, 1f));
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(AndroidUtilities.dp(16), AndroidUtilities.dp(24), AndroidUtilities.dp(16), AndroidUtilities.dp(24));

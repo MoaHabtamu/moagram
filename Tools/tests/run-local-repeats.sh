@@ -9,6 +9,7 @@ python3 Tools/tests/test-photo-permissions.py
 python3 Tools/tests/test-contact-sorting.py
 python3 Tools/tests/test-moagram-updates.py
 python3 Tools/tests/test-update-flow.py
+python3 Tools/tests/test-update-layout.py
 python3 Tools/tests/test-update-feed.py
 repeat_sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 if [[ -z "$repeat_sdk" ]]; then

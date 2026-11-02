@@ -4,10 +4,14 @@ Automated checks (no device required):
 
 ```sh
 python3 Tools/tests/test-update-flow.py
+python3 Tools/tests/test-update-layout.py
 python3 Tools/tests/test-moagram-updates.py
 python3 Tools/tests/test-update-feed.py
 ./gradlew :TMessagesProj_AppStandalone:compileAfatStandaloneJavaWithJavac --offline
 ```
+
+The layout regression compiles the page’s scroll-layout expression with the actual
+layout helper to detect zero-height content caused by overload selection.
 
 The flow harness executes the production controller with deterministic Android and
 HTTPS doubles. Signature and hash checks run separately against real signed APKs.
