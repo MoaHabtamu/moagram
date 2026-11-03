@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "package_name": "org.moagram.messenger.web",
-  "version_code": 723749,
-  "version_name": "13.1.1-Moagram.5",
+  "version_code": 723759,
+  "version_name": "13.1.1-Moagram.6",
   "min_sdk": 23,
-  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.5/Moagram-13.1.1-preview.5.apk",
-  "sha256": "9026e3c4ad81e86de085e6fb26bb84186a3e9f765691ca626156c578c1e67457",
-  "size": 71012039,
-  "critical_below_version_code": 723749,
-  "notes": "Critical update: improved download and installation flow.\n\n• Critical alerts start downloads directly, without opening the manual update page.\n• Follow download progress and cancel from the bottom of the main UI.\n• A redesigned update page shows release notes, percentage, and downloaded size.\n• Moagram explains Android installation permissions and opens the installer when you grant permission and return.\n• Verified downloads and pending installation requests survive app restarts.\n",
-  "critical_message": "An important update fixes download progress and Android installation-permission handling. Please update to Moagram preview 5 for the improved update experience."
+  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.6/Moagram-13.1.1-preview.6.apk",
+  "sha256": "70185be906a90f134fcfa91b44f4f5e574c214c693b016ea891ca006ce550e1c",
+  "size": 71011883,
+  "critical_below_version_code": 723759,
+  "notes": "Fixes the blank manual update page introduced in preview 5.\n\nThe update page now gives its scroll area the available screen height, restoring the release card, update buttons, notes, and progress details.\n\nIncludes a regression test for the layout-helper overload that caused the blank screen.\n",
+  "critical_message": "This update fixes the blank manual update page introduced in preview 5 and restores access to update controls. Please install Moagram preview 6."
 }
