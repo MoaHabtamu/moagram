@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "package_name": "org.moagram.messenger.web",
-  "version_code": 723759,
-  "version_name": "13.1.1-Moagram.6",
+  "version_code": 723769,
+  "version_name": "13.1.1-Moagram.7",
   "min_sdk": 23,
-  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.6/Moagram-13.1.1-preview.6.apk",
-  "sha256": "70185be906a90f134fcfa91b44f4f5e574c214c693b016ea891ca006ce550e1c",
-  "size": 71011883,
+  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.7/Moagram-13.1.1-preview.7.apk",
+  "sha256": "fb23fe536c55477b3a48229b2a7f0af995a5d3209fb1134fac34ab5a21e40c6e",
+  "size": 71011901,
   "critical_below_version_code": 723759,
-  "notes": "Fixes the blank manual update page introduced in preview 5.\n\nThe update page now gives its scroll area the available screen height, restoring the release card, update buttons, notes, and progress details.\n\nIncludes a regression test for the layout-helper overload that caused the blank screen.\n",
-  "critical_message": "This update fixes the blank manual update page introduced in preview 5 and restores access to update controls. Please install Moagram preview 6."
+  "notes": "The bottom update bar now matches Telegram while a download is running.\n\nThe percent stays in the center, with the progress ring beside the words. That ring cancels the download. The line across the top of the bar and the separate close button are gone.\n",
+  "critical_message": "This update fixes the blank manual update page introduced in preview 5 and restores access to update controls. Please install the latest Moagram version."
 }
