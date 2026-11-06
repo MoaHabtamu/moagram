@@ -105,4 +105,6 @@
     <string name="MoagramPreparingInstall">Preparing installer…</string>
     <string name="MoagramUpdateAttention">Update needs attention</string>
     <string name="MoagramUpdateNeedsAttention">Update needs attention</string>
+    <string name="MoagramUsageCount">Count this install</string>
+    <string name="MoagramUsageCountInfo">Sends a random install id and the app version so new installs can be counted separately from updates, along with how many people open Moagram. Your Telegram account, phone number, and messages stay on this phone.</string>
 </resources>

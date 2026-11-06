@@ -24,6 +24,11 @@ class FeedTests(unittest.TestCase):
         self.assertEqual(policy['critical_below_version_code'],0)
         self.assertEqual(policy['version_code'],723719)
         self.assertEqual(policy['apk_url'],self.asset['browser_download_url'])
+    def test_usage_address_is_kept(self):
+        url='https://stats.example.com/v1/event'
+        self.assertEqual(self.make(usage_url=url)['usage_url'], url)
+        self.assertNotIn('usage_url', self.make())
+        with self.assertRaises(ValueError): self.make(usage_url='http://stats.example.com/v1/event')
     def test_critical_release_targets_only_older_clients(self):
         policy=self.make(critical_below=723719,message='Fixes an important issue')
         self.assertEqual(policy['critical_below_version_code'],723719)

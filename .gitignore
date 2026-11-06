@@ -21,3 +21,6 @@ TMessagesProj/jni/ffmpeg/build_android
 *.apk
 *.aab
 __pycache__/
+Tools/stats/*.sqlite
+Tools/stats/cloudflare/.wrangler/
+Tools/stats/cloudflare/private.json

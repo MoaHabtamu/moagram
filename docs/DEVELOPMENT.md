@@ -10,6 +10,9 @@
 | `TMessagesProj_AppStandalone/` | Standalone APK packaging, signing configuration, and application loader |
 | `TMessagesProj/src/main/java/org/telegram/messenger/LocalRepeatController.java` | Local rule storage, queue reconciliation, transport, retry, and recovery |
 | `TMessagesProj/src/main/java/org/telegram/messenger/RepeatSchedule.java` | Cadence calculations and queue limits |
+| `TMessagesProj/src/main/java/org/telegram/messenger/MoagramUsage.java` | Anonymous daily-open report from each phone |
+| `Tools/stats/` | Collector and the report of phones that opened Moagram |
+| `Tools/stats/cloudflare/` | The same collector as a Cloudflare Worker |
 | `TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java` | Repeat picker and Manage Repeats UI |
 | `TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java` | Compose scheduling callbacks |
 | `TMessagesProj/src/main/java/org/telegram/messenger/GhostModeController.java` | Per-account Ghost Mode configuration |

@@ -338,6 +338,7 @@ public class ApplicationLoader extends Application {
                 if (wasInBackground) {
                     ensureCurrentNetworkGet(true);
                 }
+                MoagramUsage.onForeground();
             }
         };
         if (BuildConfig.DEBUG_VERSION) {

@@ -11,6 +11,7 @@ python3 Tools/tests/test-moagram-updates.py
 python3 Tools/tests/test-update-flow.py
 python3 Tools/tests/test-update-layout.py
 python3 Tools/tests/test-update-feed.py
+python3 Tools/tests/test-usage.py
 repeat_sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 if [[ -z "$repeat_sdk" ]]; then
     repeat_sdk="$(sed -n 's/^sdk.dir=//p' local.properties)"

@@ -1,0 +1,9 @@
+name = "moagram-usage"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+# Filled in by setup.sh after `wrangler d1 create moagram-usage`.
+[[d1_databases]]
+binding = "DB"
+database_name = "moagram-usage"
+database_id = "1515a563-496d-4397-9537-c44c0c86c6c7"

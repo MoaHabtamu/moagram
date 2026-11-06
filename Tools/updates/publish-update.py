@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,7 +18,16 @@ REPOSITORY = 'MoaHabtamu/moagram'
 PACKAGE = 'org.moagram.messenger.web'
 
 
-def create_policy(apk, tag, release, badging, critical_below=0, message='', notes=None):
+def usable_usage_url(value):
+    if not isinstance(value, str) or len(value) > 200 or any(ch.isspace() for ch in value):
+        return False
+    parsed = urllib.parse.urlparse(value)
+    return (parsed.scheme == 'https' and parsed.hostname and parsed.username is None
+            and parsed.port is None and not parsed.query and not parsed.fragment
+            and parsed.path == '/v1/event')
+
+
+def create_policy(apk, tag, release, badging, critical_below=0, message='', notes=None, usage_url=None):
     if release.get('draft') or release.get('tag_name') != tag:
         raise ValueError('Choose an already published release with the requested tag')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', tag):
@@ -51,10 +61,15 @@ def create_policy(apk, tag, release, badging, critical_below=0, message='', note
     notes = notes if notes is not None else release.get('name', tag)
     if len(notes) > 8000:
         raise ValueError('Update notes are too long')
-    return dict(schema_version=1, package_name=PACKAGE, version_code=code,
-                version_name=package[3], min_sdk=int(minimum[1]), apk_url=expected_url,
-                sha256=digest, size=size, critical_below_version_code=critical_below,
-                notes=notes, critical_message=message)
+    if usage_url is not None and not usable_usage_url(usage_url):
+        raise ValueError('usage_url must be https://HOST/v1/event with no port, query, or password')
+    policy = dict(schema_version=1, package_name=PACKAGE, version_code=code,
+                  version_name=package[3], min_sdk=int(minimum[1]), apk_url=expected_url,
+                  sha256=digest, size=size, critical_below_version_code=critical_below,
+                  notes=notes, critical_message=message)
+    if usage_url:
+        policy['usage_url'] = usage_url
+    return policy
 
 
 def main():
@@ -65,6 +80,8 @@ def main():
                         help='Remind only users below this Android version code; zero disables reminders')
     parser.add_argument('--critical-message', default='')
     parser.add_argument('--notes-file', type=Path)
+    parser.add_argument('--usage-url', default=None,
+                        help='HTTPS collector address ending in /v1/event. Omit to keep the address already in the feed.')
     parser.add_argument('--aapt', type=Path)
     parser.add_argument('--output', type=Path, default=ROOT / 'updates/android.json')
     args = parser.parse_args()
@@ -80,8 +97,21 @@ def main():
     request = urllib.request.Request(f'https://api.github.com/repos/{REPOSITORY}/releases/tags/{args.tag}', headers={'Accept':'application/vnd.github+json', 'User-Agent':'Moagram-release-feed'})
     with urllib.request.urlopen(request, timeout=30) as response:
         release = json.load(response)
+    previous_usage = None
+    if args.usage_url is None and args.output.exists():
+        try:
+            previous = json.loads(args.output.read_text())
+            if isinstance(previous, dict):
+                previous_usage = previous.get('usage_url')
+        except (OSError, json.JSONDecodeError):
+            previous_usage = None
+    usage_url = args.usage_url if args.usage_url is not None else previous_usage
+    if usage_url is not None and not usable_usage_url(usage_url):
+        if args.usage_url is not None:
+            parser.error('usage_url must be https://HOST/v1/event with no port, query, or password')
+        usage_url = None
     policy = create_policy(args.apk, args.tag, release, badging, args.critical_below, args.critical_message,
-                           args.notes_file.read_text() if args.notes_file else None)
+                           args.notes_file.read_text() if args.notes_file else None, usage_url)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(policy, ensure_ascii=False, indent=2) + '\n')
     print(f'Prepared {args.output}. Review, commit, and push it to master to activate the feed.')
