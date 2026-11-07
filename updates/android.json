@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "package_name": "org.moagram.messenger.web",
-  "version_code": 723779,
-  "version_name": "13.1.1-Moagram.8",
+  "version_code": 723789,
+  "version_name": "13.1.1-Moagram.9",
   "min_sdk": 23,
-  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.8/Moagram-13.1.1-preview.8.apk",
-  "sha256": "bb408a3af671e1a78179a2b02a4fd24a40a9525aff7a8cc62e58b6e979ecdd00",
-  "size": 71013195,
+  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.9/Moagram-13.1.1-preview.9.apk",
+  "sha256": "0189ddcc405f010d10511441e441901170d47f87090f82c991f157e6dd4282af",
+  "size": 71017765,
   "critical_below_version_code": 723779,
-  "notes": "Moagram now counts anonymous active use.\n\nAfter this update, a phone sends a random install id and the app version at most once a day when it is opened. The report does not include a Telegram account, phone number, or messages. Turn it off under Settings → Moagram Updates → Count this install.\n",
+  "notes": "Message notifications now stay connected in the background.\n\nMoagram keeps its background push connection and foreground keep-alive service enabled by default so incoming messages arrive reliably even when the app is closed.\n",
   "critical_message": "This update reports anonymous active use: a random install id and the app version, at most once a day. Your Telegram account, phone number, and messages stay on this phone. You can turn it off under Settings → Moagram Updates → Count this install.",
   "usage_url": "https://moagram-usage.moagram-usage.workers.dev/v1/event"
 }
