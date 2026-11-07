@@ -376,20 +376,12 @@ public class ApplicationLoader extends Application {
         } else {
             enabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", true);
         }
+        NotificationsService.onPushServiceTick(enabled, mainInterfacePaused);
         if (enabled) {
             try {
-                Intent intent = new Intent(applicationContext, NotificationsService.class);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    applicationContext.startForegroundService(intent);
-                } else {
-                    applicationContext.startService(intent);
-                }
-            } catch (Throwable e) {
-                try {
-                    applicationContext.startService(new Intent(applicationContext, NotificationsService.class));
-                } catch (Throwable ignore) {
+                applicationContext.startService(new Intent(applicationContext, NotificationsService.class));
+            } catch (Throwable ignore) {
 
-                }
             }
         } else {
             try {

@@ -9,40 +9,39 @@
 package org.telegram.messenger;
 
 import android.app.AlarmManager;
-import android.app.Notification;
-import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.SystemClock;
 
-import androidx.core.app.NotificationCompat;
-
 import org.telegram.tgnet.ConnectionsManager;
-import org.telegram.ui.LaunchActivity;
 
 public class NotificationsService extends Service {
 
-    private static final String CHANNEL_ID = "moagram_keep_alive_service";
-    private static final int NOTIFICATION_ID = 723699;
+    private static final String LEGACY_CHANNEL_ID = "moagram_keep_alive_service";
+    private static final int LEGACY_NOTIFICATION_ID = 723699;
     private static final int ALARM_REQUEST_CODE = 723699;
     private static final long HEARTBEAT_INTERVAL_MS = 3 * 60 * 1000L;
 
-    private final Runnable heartbeatRunnable = new Runnable() {
+    private static final Runnable heartbeatRunnable = new Runnable() {
         @Override
         public void run() {
+            Context context = ApplicationLoader.applicationContext;
             if (!isKeepAliveEnabled()) {
-                stopSelf();
+                if (context != null) {
+                    cancelWakeupAlarm(context);
+                }
                 return;
             }
-            ensurePushConnectionsAlive();
-            scheduleWakeupAlarm();
+            ensurePushConnectionsAlive(false);
+            if (context != null) {
+                scheduleWakeupAlarm(context, HEARTBEAT_INTERVAL_MS);
+            }
             AndroidUtilities.runOnUIThread(this, HEARTBEAT_INTERVAL_MS);
         }
     };
@@ -50,18 +49,16 @@ public class NotificationsService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        startForegroundCompat();
+        clearLegacyForegroundNotification(this);
         ApplicationLoader.postInitApplication();
-        ensurePushConnectionsAlive();
-        scheduleHeartbeat();
+        onPushServiceTick(isKeepAliveEnabled(), false);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForegroundCompat();
+        clearLegacyForegroundNotification(this);
         ApplicationLoader.postInitApplication();
-        ensurePushConnectionsAlive();
-        scheduleHeartbeat();
+        onPushServiceTick(isKeepAliveEnabled(), false);
         return START_STICKY;
     }
 
@@ -74,27 +71,9 @@ public class NotificationsService extends Service {
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
         if (isKeepAliveEnabled()) {
-            scheduleWakeupAlarm(5000L);
-            sendStartBroadcast();
+            scheduleWakeupAlarm(this, 5000L);
+            sendStartBroadcast(this);
         }
-    }
-
-    @Override
-    public void onTimeout(int startId) {
-        if (isKeepAliveEnabled()) {
-            scheduleWakeupAlarm(1000L);
-            sendStartBroadcast();
-        }
-        stopSelf(startId);
-    }
-
-    @Override
-    public void onTimeout(int startId, int fgsType) {
-        if (isKeepAliveEnabled()) {
-            scheduleWakeupAlarm(1000L);
-            sendStartBroadcast();
-        }
-        stopSelf(startId);
     }
 
     @Override
@@ -102,11 +81,30 @@ public class NotificationsService extends Service {
         super.onDestroy();
         AndroidUtilities.cancelRunOnUIThread(heartbeatRunnable);
         if (isKeepAliveEnabled()) {
-            scheduleWakeupAlarm(5000L);
-            sendStartBroadcast();
+            scheduleWakeupAlarm(this, 5000L);
+            sendStartBroadcast(this);
         } else {
-            cancelWakeupAlarm();
+            cancelWakeupAlarm(this);
         }
+    }
+
+    public static void onPushServiceTick(boolean enabled, boolean fromBackgroundWakeup) {
+        Context context = ApplicationLoader.applicationContext;
+        if (context != null) {
+            clearLegacyForegroundNotification(context);
+        }
+        AndroidUtilities.cancelRunOnUIThread(heartbeatRunnable);
+        if (!enabled) {
+            if (context != null) {
+                cancelWakeupAlarm(context);
+            }
+            return;
+        }
+        ensurePushConnectionsAlive(fromBackgroundWakeup);
+        if (context != null) {
+            scheduleWakeupAlarm(context, HEARTBEAT_INTERVAL_MS);
+        }
+        AndroidUtilities.runOnUIThread(heartbeatRunnable, HEARTBEAT_INTERVAL_MS);
     }
 
     private static boolean isKeepAliveEnabled() {
@@ -114,46 +112,41 @@ public class NotificationsService extends Service {
         return preferences.getBoolean("pushService", true);
     }
 
-    private void scheduleHeartbeat() {
-        AndroidUtilities.cancelRunOnUIThread(heartbeatRunnable);
-        AndroidUtilities.runOnUIThread(heartbeatRunnable, HEARTBEAT_INTERVAL_MS);
-        scheduleWakeupAlarm();
-    }
-
-    private void ensurePushConnectionsAlive() {
+    private static void ensurePushConnectionsAlive(boolean startKeepAliveJob) {
+        boolean anyActive = false;
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
             if (UserConfig.getInstance(a).isClientActivated()) {
                 ConnectionsManager cm = ConnectionsManager.getInstance(a);
                 boolean pushEnabled = cm.isPushConnectionEnabled();
                 cm.setPushConnectionEnabled(pushEnabled);
                 if (pushEnabled) {
+                    anyActive = true;
                     cm.checkConnection();
                     cm.resumeNetworkMaybe();
                 }
             }
         }
+        if (startKeepAliveJob && anyActive) {
+            KeepAliveJob.startJob();
+        }
     }
 
-    private void sendStartBroadcast() {
+    private static void sendStartBroadcast(Context context) {
         try {
             Intent intent = new Intent("org.telegram.start");
-            intent.setPackage(getPackageName());
-            sendBroadcast(intent);
+            intent.setPackage(context.getPackageName());
+            context.sendBroadcast(intent);
         } catch (Throwable ignore) {
         }
     }
 
-    private void scheduleWakeupAlarm() {
-        scheduleWakeupAlarm(HEARTBEAT_INTERVAL_MS);
-    }
-
-    private void scheduleWakeupAlarm(long delayMs) {
+    private static void scheduleWakeupAlarm(Context context, long delayMs) {
         try {
-            AlarmManager alarms = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            AlarmManager alarms = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
             if (alarms == null) {
                 return;
             }
-            PendingIntent pendingIntent = getWakeupPendingIntent();
+            PendingIntent pendingIntent = getWakeupPendingIntent(context);
             long triggerAt = SystemClock.elapsedRealtime() + delayMs;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 alarms.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent);
@@ -164,107 +157,38 @@ public class NotificationsService extends Service {
         }
     }
 
-    private void cancelWakeupAlarm() {
+    private static void cancelWakeupAlarm(Context context) {
         try {
-            AlarmManager alarms = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            AlarmManager alarms = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
             if (alarms != null) {
-                alarms.cancel(getWakeupPendingIntent());
+                alarms.cancel(getWakeupPendingIntent(context));
             }
         } catch (Throwable ignore) {
         }
     }
 
-    private PendingIntent getWakeupPendingIntent() {
-        Intent intent = new Intent(this, AppStartReceiver.class);
+    private static PendingIntent getWakeupPendingIntent(Context context) {
+        Intent intent = new Intent(context, AppStartReceiver.class);
         intent.setAction("org.telegram.start");
-        intent.setPackage(getPackageName());
+        intent.setPackage(context.getPackageName());
         return PendingIntent.getBroadcast(
-                this,
+                context,
                 ALARM_REQUEST_CODE,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
     }
 
-    private void startForegroundCompat() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return;
-        }
+    private static void clearLegacyForegroundNotification(Context context) {
         try {
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null && nm.getNotificationChannel(CHANNEL_ID) == null) {
-                String channelName = "Keep-Alive Service";
-                try {
-                    String localized = LocaleController.getString("NotificationsService", R.string.NotificationsService);
-                    if (localized != null && !localized.isEmpty()) {
-                        channelName = localized;
-                    }
-                } catch (Throwable ignore) {
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.cancel(LEGACY_NOTIFICATION_ID);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    nm.deleteNotificationChannel(LEGACY_CHANNEL_ID);
                 }
-                NotificationChannel channel = new NotificationChannel(CHANNEL_ID, channelName, NotificationManager.IMPORTANCE_MIN);
-                channel.setSound(null, null);
-                channel.enableVibration(false);
-                channel.enableLights(false);
-                channel.setShowBadge(false);
-                nm.createNotificationChannel(channel);
             }
-
-            Intent openIntent = new Intent(this, LaunchActivity.class);
-            openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            PendingIntent contentIntent = PendingIntent.getActivity(
-                    this,
-                    0,
-                    openIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-            );
-
-            String title = "Moagram";
-            String text = "Background connection enabled for instant notifications";
-            try {
-                String t = LocaleController.getString("NotificationsService", R.string.NotificationsService);
-                String s = LocaleController.getString("NotificationsServiceConnectionInfo", R.string.NotificationsServiceConnectionInfo);
-                if (t != null && !t.isEmpty()) {
-                    title = t;
-                }
-                if (s != null && !s.isEmpty()) {
-                    text = s;
-                }
-            } catch (Throwable ignore) {
-            }
-
-            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
-                    .setSmallIcon(R.drawable.notification)
-                    .setContentTitle(title)
-                    .setContentText(text)
-                    .setPriority(NotificationCompat.PRIORITY_MIN)
-                    .setCategory(NotificationCompat.CATEGORY_SERVICE)
-                    .setOngoing(true)
-                    .setSilent(true)
-                    .setShowWhen(false)
-                    .setContentIntent(contentIntent)
-                    .build();
-
-            if (Build.VERSION.SDK_INT >= 34) {
-                startForeground(
-                        NOTIFICATION_ID,
-                        notification,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE | ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING
-                );
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
-            } else {
-                startForeground(NOTIFICATION_ID, notification);
-            }
-        } catch (Throwable e) {
-            try {
-                Notification fallback = new NotificationCompat.Builder(this, CHANNEL_ID)
-                        .setSmallIcon(R.drawable.notification)
-                        .setPriority(NotificationCompat.PRIORITY_MIN)
-                        .setSilent(true)
-                        .build();
-                startForeground(NOTIFICATION_ID, fallback);
-            } catch (Throwable ignore) {
-            }
+        } catch (Throwable ignore) {
         }
     }
 }
