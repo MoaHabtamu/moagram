@@ -1507,6 +1507,15 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         return overlayPasscodeViews.isEmpty() && this.passcodeDialog != null ? passcodeView == this.passcodeDialog.passcodeView : overlayPasscodeViews.get(overlayPasscodeViews.size() - 1) == passcodeView;
     }
 
+    private void openLocalRepeats(Intent intent, int account, long dialogId) {
+        if (intent == null || !intent.getBooleanExtra("local_repeats", false) || dialogId == 0) return;
+        AndroidUtilities.runOnUIThread(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                AlertsCreator.showLocalRepeats(this, account, dialogId, null);
+            }
+        }, 400);
+    }
+
     private boolean handleIntent(Intent intent, boolean isNew, boolean restore, boolean fromPassword) {
         return handleIntent(intent, isNew, restore, fromPassword, null, true, false);
     }
@@ -3036,6 +3045,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         if (getActionBarLayout().presentFragment(new INavigationLayout.NavigationParams(fragment).setNoAnimation(true))) {
                             pushOpened = true;
                             LaunchActivity.dismissAllWeb();
+                            openLocalRepeats(intent, intentAccount[0], push_user_id);
                         }
                     }
                 }
@@ -3071,6 +3081,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     if (getActionBarLayout().presentFragment(new INavigationLayout.NavigationParams(fragment).setNoAnimation(true))) {
                         pushOpened = true;
                         LaunchActivity.dismissAllWeb();
+                        openLocalRepeats(intent, intentAccount[0], -push_chat_id);
                     }
                 }
             } else if (push_enc_id != 0) {

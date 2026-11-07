@@ -17,6 +17,18 @@ public class MoagramUsageTest {
         check(!org.telegram.messenger.MoagramUsage.allowedUrl("https://stats.example.com/v1/event?x=1"), "query string");
         check(!org.telegram.messenger.MoagramUsage.allowedUrl("https://stats.example.com/collect"), "unexpected path");
         check(!org.telegram.messenger.MoagramUsage.allowedUrl(""), "empty address");
+        java.util.TimeZone original = java.util.TimeZone.getDefault();
+        try {
+            for (String zone : new String[]{"Africa/Addis_Ababa", "America/Los_Angeles", "Pacific/Kiritimati"}) {
+                java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(zone));
+                long midnight = java.time.Instant.parse("2026-11-07T00:00:00Z").toEpochMilli();
+                check(org.telegram.messenger.MoagramUsage.utcDay(midnight - 1) == 20261106, "before UTC midnight in " + zone);
+                check(org.telegram.messenger.MoagramUsage.utcDay(midnight) == 20261107, "UTC midnight in " + zone);
+                check(org.telegram.messenger.MoagramUsage.utcDay(midnight + 21 * 60 * 60 * 1000L) == 20261107, "local midnight does not reset UTC day in " + zone);
+            }
+        } finally {
+            java.util.TimeZone.setDefault(original);
+        }
         System.out.println("MoagramUsage: " + checks + " checks passed");
     }
 

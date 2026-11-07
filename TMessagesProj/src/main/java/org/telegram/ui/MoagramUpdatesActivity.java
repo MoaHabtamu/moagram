@@ -226,7 +226,7 @@ public class MoagramUpdatesActivity extends BaseFragment {
                     + "\n" + text(R.string.MoagramDownloadContinue));
         } else if (updates.ready()) {
             status.setText(text(R.string.MoagramUpdateReadyTitle));
-            details.setText(text(updates.needsInstallPermission() ? R.string.MoagramUpdatePermissionInfo : R.string.MoagramUpdateReady));
+            details.setText(updates.installationInfo());
         } else if (newer && !compatible) {
             status.setText(LocaleController.formatString(R.string.MoagramUpdateAvailable, policy.versionName));
             details.setText(text(R.string.MoagramUpdateAndroidRequired));

@@ -69,6 +69,14 @@ public class GhostModeActivity extends BaseFragment {
     private final static int TYPE_SHADOW = 3;
     private final static int TYPE_SETTINGS = 4;
 
+    public GhostModeActivity() {
+        this(UserConfig.selectedAccount);
+    }
+
+    public GhostModeActivity(int account) {
+        setCurrentAccount(account);
+    }
+
     @Override
     public boolean onFragmentCreate() {
         super.onFragmentCreate();
@@ -126,8 +134,7 @@ public class GhostModeActivity extends BaseFragment {
         listView.setOnItemClickListener((view, position) -> {
             GhostModeController ghostMode = GhostModeController.getInstance(currentAccount);
             if (position == masterRow) {
-                ghostMode.enabled = !ghostMode.enabled;
-                ghostMode.save();
+                ghostMode.setEnabled(!ghostMode.enabled);
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(ghostMode.enabled);
                 }
@@ -328,7 +335,7 @@ public class GhostModeActivity extends BaseFragment {
                                 false,
                                 false
                         );
-                        checkCell.setEnabled(false, null);
+                        checkCell.setEnabled(true, null);
                     } else if (position == hideOnlineRow) {
                         checkCell.setTextAndValueAndCheck(
                                 LocaleController.getString(R.string.GhostModeOnline),

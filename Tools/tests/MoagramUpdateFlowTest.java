@@ -20,6 +20,7 @@ public class MoagramUpdateFlowTest {
             2, "2.0", 23, "https://github.com/MoaHabtamu/moagram/releases/download/v2/app.apk",
             hash, apk.length, 2, "Release notes", "Critical fix");
     private static volatile int requests;
+    private static volatile String requestedUrl;
     private static CountDownLatch hold;
     private static File directory;
 
@@ -56,9 +57,40 @@ public class MoagramUpdateFlowTest {
         return context;
     }
     private static void prompt(MoagramUpdateController controller, LaunchActivity activity) throws Exception {
+        prompt(controller, activity, update);
+    }
+    private static void prompt(MoagramUpdateController controller, LaunchActivity activity, MoagramUpdatePolicy policy) throws Exception {
         Method method = MoagramUpdateController.class.getDeclaredMethod("prompt", LaunchActivity.class, MoagramUpdatePolicy.class);
         method.setAccessible(true);
-        method.invoke(controller, activity, update);
+        method.invoke(controller, activity, policy);
+    }
+    private static void regularReleaseAfterCritical() throws Exception {
+        MoagramUpdatePolicy latest = new MoagramUpdatePolicy(1, MoagramUpdatePolicy.PACKAGE,
+                3, "3.0", 23, "https://github.com/MoaHabtamu/moagram/releases/download/v3/app.apk",
+                hash, apk.length, 2, "Optional improvements", "Includes the earlier critical fix");
+        for (int installed : new int[]{1, 2, 3}) {
+            Context context = reset("regular-after-critical-" + installed);
+            context.manager.installed = installed;
+            context.manager.archiveVersion = 3;
+            MoagramUpdateController controller = controller();
+            LaunchActivity activity = new LaunchActivity();
+            controller.onActivityResumed(activity);
+            prompt(controller, activity, latest);
+            if (installed == 1) {
+                require(AlertDialog.shown != null, "Skipped critical release must still prompt");
+                int before = requests;
+                AlertDialog.shown.accept();
+                require(controller.downloading(), "Inherited critical action must download directly");
+                until(controller::ready);
+                require(requests == before + 1 && latest.apkUrl.equals(requestedUrl),
+                        "Skipped critical release must download the latest APK directly");
+                require(controller.policy().versionCode == 3, "Must offer latest regular release, not old critical APK");
+            } else {
+                require(AlertDialog.shown == null, "Critical/current release users must not receive critical alert");
+                controller.offer(latest);
+                require(controller.policy().versionCode == 3, "Latest release must remain available to manual checks");
+            }
+        }
     }
     private static void download(MoagramUpdateController controller, LaunchActivity activity) throws Exception {
         controller.onActivityResumed(activity);
@@ -85,7 +117,8 @@ public class MoagramUpdateFlowTest {
         require(requests == before + 1, "Unexpected download request count");
         require(controller.downloadedBytes() == update.size, "Completion must report full progress");
         require(notifications[0] > 0, "Shared UI listeners were not notified");
-        require(AlertDialog.shown.message.equals(LocaleController.getString(R.string.MoagramUpdatePermissionInfo)), "Permission explanation missing");
+        require(AlertDialog.shown.message.contains(LocaleController.getString(R.string.MoagramUpdatePermissionInfo)), "Permission explanation missing");
+        require(AlertDialog.shown.message.contains(LocaleController.getString(R.string.MoagramUpdatePlayProtectInfo)), "Play Protect explanation missing before granting install permission");
         AlertDialog.shown.accept();
         require(activity.launched.equals(Arrays.asList("permission")), "Must open this app's installation permission settings");
         controller.onActivityPaused(activity);
@@ -121,6 +154,19 @@ public class MoagramUpdateFlowTest {
         require(requests == before, "Restart redownloaded an existing APK");
         require(MoagramUpdateSecurity.verifications >= verifications + 2, "Restore and installer must each verify the APK");
         require(!context.prefs.getBoolean("pending_install", false), "Pending install was not consumed");
+    }
+    private static void playProtectNoticeWithInstallPermission() throws Exception {
+        Context context = reset("play-protect-allowed");
+        context.manager.allowed = true;
+        MoagramUpdateController controller = controller();
+        LaunchActivity activity = new LaunchActivity();
+        download(controller, activity);
+        require(AlertDialog.shown != null, "Ready notice missing with installation already allowed");
+        require(AlertDialog.shown.message.contains(LocaleController.getString(R.string.MoagramUpdateReady)), "Ready explanation missing");
+        require(AlertDialog.shown.message.contains(LocaleController.getString(R.string.MoagramUpdatePlayProtectInfo)), "Play Protect explanation missing when installation already allowed");
+        AlertDialog.shown.accept();
+        until(() -> activity.launched.contains("install"));
+        require(activity.launched.equals(Arrays.asList("install")), "Play Protect explanation added an extra installation step");
     }
     private static void activityRecreationDuringInstallerVerification() throws Exception {
         Context context = reset("rotation");
@@ -207,7 +253,7 @@ public class MoagramUpdateFlowTest {
             @Override protected URLConnection openConnection(URL url) {
                 return new HttpURLConnection(url) {
                     final CountDownLatch gate = hold;
-                    @Override public int getResponseCode() { requests++; return 200; }
+                    @Override public int getResponseCode() { requestedUrl=url.toString(); requests++; return 200; }
                     @Override public String getHeaderField(String name) { return name.equals("Content-Length") ? String.valueOf(apk.length) : null; }
                     @Override public InputStream getInputStream() throws IOException {
                         if (gate != null) try { gate.await(); } catch (InterruptedException e) { throw new IOException(e); }
@@ -221,12 +267,14 @@ public class MoagramUpdateFlowTest {
         });
         try {
             criticalDownloadAndPermission();
+            regularReleaseAfterCritical();
+            playProtectNoticeWithInstallPermission();
             permissionSurvivesProcessRecreation();
             activityRecreationDuringInstallerVerification();
             missingOrInstalledApkIsNotRestored();
             cancelledDownloadCanRestart();
             deferredNoticeAndInstallReverification();
-            System.out.println("Update flow tests passed: critical download, shared progress, permission denial/grant, process recreation, stale APKs, cancellation, deferred notices, reverification");
+            System.out.println("Update flow tests passed: critical download, regular release after critical, shared progress, permission denial/grant, process recreation, stale APKs, cancellation, deferred notices, reverification");
         } finally {
             for (MoagramUpdateController controller : controllers) {
                 Field field = MoagramUpdateController.class.getDeclaredField("worker");

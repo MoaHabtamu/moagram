@@ -15,6 +15,7 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Calendar;
+import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -90,7 +91,7 @@ public final class MoagramUsage {
             id = UUID.randomUUID().toString();
             preferences.edit().putString("install_id", id).apply();
         }
-        int day = today();
+        int day = utcDay(now);
         int reported = preferences.getInt("reported_version", -1);
         String event = choose(reported >= 0, freshInstall(info.firstInstallTime, info.lastUpdateTime),
                 version, reported, day, preferences.getInt("last_ping_day", 0));
@@ -165,8 +166,9 @@ public final class MoagramUsage {
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
-    private static int today() {
-        Calendar calendar = Calendar.getInstance();
+    public static int utcDay(long timestamp) {
+        Calendar calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"));
+        calendar.setTimeInMillis(timestamp);
         return calendar.get(Calendar.YEAR) * 10000
                 + (calendar.get(Calendar.MONTH) + 1) * 100
                 + calendar.get(Calendar.DAY_OF_MONTH);

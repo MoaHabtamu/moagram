@@ -594,8 +594,8 @@ public class MessagesController extends BaseController implements NotificationCe
     public boolean blockedCountry;
     public boolean preloadFeaturedStickers;
     public String youtubePipType;
-    public boolean keepAliveService;
-    public boolean backgroundConnection;
+    public boolean keepAliveService = true;
+    public boolean backgroundConnection = true;
     public float animatedEmojisZoom;
     public boolean filtersEnabled;
     public boolean getfileExperimentalParams;
@@ -1666,8 +1666,8 @@ public class MessagesController extends BaseController implements NotificationCe
         canRevokePmInbox = mainPreferences.getBoolean("canRevokePmInbox", canRevokePmInbox);
         preloadFeaturedStickers = mainPreferences.getBoolean("preloadFeaturedStickers", false);
         youtubePipType = mainPreferences.getString("youtubePipType", "disabled");
-        keepAliveService = mainPreferences.getBoolean("keepAliveService", false);
-        backgroundConnection = mainPreferences.getBoolean("backgroundConnection", false);
+        keepAliveService = mainPreferences.getBoolean("keepAliveService", true);
+        backgroundConnection = mainPreferences.getBoolean("backgroundConnection", true);
         promoDialogId = mainPreferences.getLong("proxy_dialog", 0);
         nextPromoInfoCheckTime = mainPreferences.getInt("nextPromoInfoCheckTime", 0);
         promoDialogType = mainPreferences.getInt("promo_dialog_type", 0);
@@ -3047,26 +3047,20 @@ public class MessagesController extends BaseController implements NotificationCe
                     break;
                 }
                 case "background_connection": {
-                    if (value.value instanceof TLRPC.TL_jsonBool) {
-                        TLRPC.TL_jsonBool bool = (TLRPC.TL_jsonBool) value.value;
-                        if (bool.value != backgroundConnection) {
-                            backgroundConnection = bool.value;
-                            editor.putBoolean("backgroundConnection", backgroundConnection);
-                            changed = true;
-                            keelAliveChanged = true;
-                        }
+                    if (!backgroundConnection) {
+                        backgroundConnection = true;
+                        editor.putBoolean("backgroundConnection", true);
+                        changed = true;
+                        keelAliveChanged = true;
                     }
                     break;
                 }
                 case "keep_alive_service": {
-                    if (value.value instanceof TLRPC.TL_jsonBool) {
-                        TLRPC.TL_jsonBool bool = (TLRPC.TL_jsonBool) value.value;
-                        if (bool.value != keepAliveService) {
-                            keepAliveService = bool.value;
-                            editor.putBoolean("keepAliveService", keepAliveService);
-                            changed = true;
-                            keelAliveChanged = true;
-                        }
+                    if (!keepAliveService) {
+                        keepAliveService = true;
+                        editor.putBoolean("keepAliveService", true);
+                        changed = true;
+                        keelAliveChanged = true;
                     }
                     break;
                 }

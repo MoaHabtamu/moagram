@@ -123,7 +123,7 @@ function loginDocument(message) {
         <main class="card narrow">
             <p class="mark">Moagram</p>
             <h1>Active use</h1>
-            <p class="quiet">Sign in to see how many phones open the app.</p>
+            <p class="quiet">Sign in to see how many installs report activity.</p>
             ${notice}
             <form method="post" action="/login">
                 <label for="password">Password</label>
@@ -147,14 +147,21 @@ async function dashboardDocument(db, now) {
                 <form method="post" action="/logout"><button class="quiet-button" type="submit">Sign out</button></form>
             </header>
             <section class="stats">
-                ${stat(totals.active_1d, 'Last day')}
+                ${stat(totals.active_1d, 'Last 24 hours')}
                 ${stat(totals.active_7d, 'Last 7 days')}
                 ${stat(totals.active_30d, 'Last 30 days')}
-                ${stat(heard, 'Phones so far')}
+                ${stat(heard, 'Installs so far')}
             </section>
+            <p class="quiet">Active installs based on received reports. Reinstalling or clearing app data can create a new install.</p>
             <h2>Last 30 days</h2>
             ${chart(days)}
-            <p class="quiet">Each bar is a UTC day. A phone counts once on a day it opens Moagram.</p>
+            <p class="quiet">Each bar is a UTC day. An install counts once per day it reports. Today is incomplete; the cards above use rolling time windows.</p>
+            ${dailyTable(days)}
+            <h2>Version adoption</h2>
+            <p class="quiet">Share of installs reporting in the last 30 days, grouped by their latest reported version.</p>
+            ${versionTable(totals)}
+            <h2>Returned in week two</h2>
+            ${retentionDocument(totals.week_two)}
         </main>`);
 }
 
@@ -164,17 +171,41 @@ function stat(value, label) {
 
 function chart(days) {
     const width = 640;
-    const height = 168;
+    const height = 190;
     const max = Math.max(1, ...days.map(day => day.phones));
+    const ceiling = max <= 4 ? max : Math.ceil(max / 4) * 4;
+    const left = Math.max(36, String(ceiling).length * 9 + 12);
     const gap = 5;
-    const barWidth = (width - gap * (days.length - 1)) / days.length;
-    const bars = days.map((day, index) => {
-        const barHeight = day.phones === 0 ? 3 : Math.max(4, Math.round((day.phones / max) * 120));
-        const x = index * (barWidth + gap);
-        const y = 132 - barHeight;
-        return `<rect x="${x.toFixed(1)}" y="${y}" width="${barWidth.toFixed(1)}" height="${barHeight}" rx="2" fill="${day.phones ? '#8fbf6a' : '#34382f'}"><title>${escapeHtml(day.day)}: ${day.phones}</title></rect>`;
+    const barWidth = (width - left - gap * (days.length - 1)) / days.length;
+    const ticks = [...new Set([0, Math.round(ceiling / 2), ceiling])].map(value => {
+        const y = 142 - (value / ceiling) * 120;
+        return `<line x1="${left}" x2="${width}" y1="${y}" y2="${y}" stroke="#34382f"/><text x="${left - 8}" y="${y + 4}" text-anchor="end">${value}</text>`;
     }).join('');
-    return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Phones that opened Moagram on each of the last 30 days">${bars}<text x="0" y="158">${escapeHtml(days[0].day.slice(5))}</text><text x="${width}" y="158" text-anchor="end">${escapeHtml(days[days.length - 1].day.slice(5))}</text></svg>`;
+    const bars = days.map((day, index) => {
+        const barHeight = (day.phones / ceiling) * 120;
+        const x = left + index * (barWidth + gap);
+        const y = 142 - barHeight;
+        const today = index === days.length - 1;
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barHeight.toFixed(1)}" rx="2" fill="${today ? '#f0c27a' : '#8fbf6a'}"><title>${escapeHtml(day.day)}: ${day.phones} installs${today ? ' (today, incomplete)' : ''}</title></rect>`;
+    }).join('');
+    return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Daily active installs over 30 UTC days; today is incomplete. Exact counts are in Show daily counts below.">${ticks}${bars}<text x="${left}" y="165">${escapeHtml(days[0].day.slice(5))}</text><text x="${width}" y="165" text-anchor="end">Today</text><text x="${width}" y="183" text-anchor="end">Incomplete</text></svg>`;
+}
+
+function dailyTable(days) {
+    const rows = [...days].reverse().map((day, index) => `<tr><th scope="row">${escapeHtml(day.day)}${index === 0 ? ' (today, incomplete)' : ''}</th><td>${day.phones}</td></tr>`).join('');
+    return `<details><summary>Show daily counts</summary><table><caption>Daily active installs · UTC</caption><thead><tr><th scope="col">Date</th><th scope="col">Installs</th></tr></thead><tbody>${rows}</tbody></table></details>`;
+}
+
+function versionTable(totals) {
+    const versions = totals.by_version.filter(version => version.active_30d > 0);
+    if (!versions.length) return '<p class="quiet">No installs have reported in the last 30 days.</p>';
+    const rows = versions.map(version => `<tr><th scope="row">${escapeHtml(version.version_name || 'Unnamed version')}<small>Build ${version.version_code}</small></th><td>${version.active_30d}</td><td>${(100 * version.active_30d / totals.active_30d).toFixed(1)}%</td></tr>`).join('');
+    return `<table><caption>Active installs by version · last 30 days</caption><thead><tr><th scope="col">Version</th><th scope="col">Installs</th><th scope="col">Share</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function retentionDocument(retention) {
+    const result = retention.eligible ? `<p><strong>${(100 * retention.returned / retention.eligible).toFixed(1)}%</strong> · ${retention.returned} of ${retention.eligible} eligible installs reported again in week two.</p>` : '<p class="quiet">Not enough history yet. Installs need two complete UTC weeks before they can be counted.</p>';
+    return `${result}<p class="quiet">Among installs first seen from ${retention.cohort_start} through ${retention.cohort_end}, counts those reporting 7–13 UTC days after their first report. This measures return after first reporting, which can happen on an update. Only installs with a recorded first day are included.</p>`;
 }
 
 function shell(title, body) {
@@ -205,8 +236,16 @@ button { margin-top: 14px; padding: 11px 16px; border: 0; border-radius: 999px; 
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 26px; }
 article { padding: 14px; border-radius: 12px; background: #12140f; }
 article strong { display: block; font-size: 28px; }
-article span, svg text { color: #b7b2a6; font: 12px/1.2 sans-serif; }
+article span, svg text { color: #b7b2a6; fill: #b7b2a6; font: 12px/1.2 sans-serif; }
 svg { width: 100%; height: auto; display: block; }
+table { width: 100%; border-collapse: collapse; margin-top: 14px; font: 14px/1.5 sans-serif; }
+caption { text-align: left; color: #b7b2a6; margin-bottom: 10px; }
+th, td { padding: 12px 8px; border-bottom: 1px solid #34382f; text-align: right; }
+th:first-child { text-align: left; overflow-wrap: anywhere; }
+tbody th { font-weight: 400; }
+small { display: block; color: #b7b2a6; }
+summary { cursor: pointer; padding: 12px 0; font: 600 14px/1.5 sans-serif; }
+:focus-visible { outline: 2px solid #f0c27a; outline-offset: 4px; }
 @media (max-width: 680px) { .stats { grid-template-columns: 1fr 1fr; } h1 { font-size: 30px; } }
 </style>
 </head>
@@ -332,7 +371,7 @@ function utcDay(ms) {
 async function summary(db, now) {
     if (!db) throw new Error('missing database');
     const count = async (sql, ...args) => (await db.prepare(sql).bind(...args).first()).n;
-    const versions = await db.prepare(`SELECT version_code,
+    const versions = await db.prepare(`SELECT version_code, MAX(version_name) AS version_name,
             SUM(kind = 'install') AS new_installs,
             SUM(last_seen >= ?) AS active_30d
         FROM installs GROUP BY version_code ORDER BY version_code DESC`).bind(now - 30 * DAY).all();
@@ -344,7 +383,22 @@ async function summary(db, now) {
         active_7d: await count('SELECT COUNT(*) AS n FROM installs WHERE last_seen >= ?', now - 7 * DAY),
         active_30d: await count('SELECT COUNT(*) AS n FROM installs WHERE last_seen >= ?', now - 30 * DAY),
         by_version: versions.results,
+        week_two: await weekTwoRetention(db, now),
     };
+}
+
+async function weekTwoRetention(db, now) {
+    const today = Date.parse(`${utcDay(now)}T00:00:00.000Z`);
+    const start = today - 43 * DAY;
+    const end = today - 13 * DAY;
+    const row = await db.prepare(`SELECT COUNT(*) AS eligible,
+        COALESCE(SUM(EXISTS(SELECT 1 FROM daily d WHERE d.id = i.id
+            AND d.day >= date(i.first_seen / 1000, 'unixepoch', '+7 days')
+            AND d.day < date(i.first_seen / 1000, 'unixepoch', '+14 days'))), 0) AS returned
+        FROM installs i WHERE i.first_seen >= ? AND i.first_seen < ?
+        AND EXISTS(SELECT 1 FROM daily d WHERE d.id = i.id
+            AND d.day = date(i.first_seen / 1000, 'unixepoch'))`).bind(start, end).first();
+    return { ...row, cohort_start: utcDay(start), cohort_end: utcDay(end - DAY) };
 }
 
 function json(body) {

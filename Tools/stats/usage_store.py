@@ -2,12 +2,17 @@
 import re
 import sqlite3
 import threading
+from datetime import datetime, timezone
 
 UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$')
 EVENTS = {'install', 'update', 'active'}
 DAY = 24 * 60 * 60 * 1000
 HOUR = 60 * 60 * 1000
 NEW_INSTALL_LIMIT = 120
+
+
+def utc_day(timestamp):
+    return datetime.fromtimestamp(timestamp / 1000, timezone.utc).date().isoformat()
 
 
 class UsageError(ValueError):
@@ -29,6 +34,9 @@ class Store:
             first_seen INTEGER NOT NULL,
             last_seen INTEGER NOT NULL,
             update_count INTEGER NOT NULL
+        )''')
+        self._db.execute('''CREATE TABLE IF NOT EXISTS daily (
+            day TEXT NOT NULL, id TEXT NOT NULL, PRIMARY KEY (day, id)
         )''')
 
     def close(self):
@@ -67,6 +75,9 @@ class Store:
                     SET version_code = ?, version_name = ?, last_seen = ?,
                         update_count = update_count + ?
                     WHERE id = ?''', (version, name, now, updates, install_id))
+            self._db.execute('INSERT OR IGNORE INTO daily (day, id) VALUES (?, ?)',
+                             (utc_day(now), install_id))
+            self._db.execute('DELETE FROM daily WHERE day < ?', (utc_day(now - 180 * DAY),))
             self._db.commit()
 
     def summary(self, now):
@@ -75,14 +86,24 @@ class Store:
                 return self._db.execute(sql, args).fetchone()[0]
             versions = [{
                 'version_code': version,
+                'version_name': name,
                 'new_installs': installs,
                 'active_30d': active,
-            } for version, installs, active in self._db.execute(
-                '''SELECT version_code,
+            } for version, name, installs, active in self._db.execute(
+                '''SELECT version_code, MAX(version_name),
                           SUM(kind = 'install'),
                           SUM(last_seen >= ?)
                    FROM installs GROUP BY version_code ORDER BY version_code DESC''',
                 (now - 30 * DAY,))]
+            today = now // DAY * DAY
+            start, end = today - 43 * DAY, today - 13 * DAY
+            eligible, returned = self._db.execute('''SELECT COUNT(*),
+                COALESCE(SUM(EXISTS(SELECT 1 FROM daily d WHERE d.id = i.id
+                    AND d.day >= date(i.first_seen / 1000, 'unixepoch', '+7 days')
+                    AND d.day < date(i.first_seen / 1000, 'unixepoch', '+14 days'))), 0)
+                FROM installs i WHERE i.first_seen >= ? AND i.first_seen < ?
+                AND EXISTS(SELECT 1 FROM daily d WHERE d.id = i.id
+                    AND d.day = date(i.first_seen / 1000, 'unixepoch'))''', (start, end)).fetchone()
             return {
                 'new_installs': count("SELECT COUNT(*) FROM installs WHERE kind = 'install'"),
                 'existing_installs': count("SELECT COUNT(*) FROM installs WHERE kind = 'existing'"),
@@ -91,4 +112,8 @@ class Store:
                 'active_7d': count('SELECT COUNT(*) FROM installs WHERE last_seen >= ?', now - 7 * DAY),
                 'active_30d': count('SELECT COUNT(*) FROM installs WHERE last_seen >= ?', now - 30 * DAY),
                 'by_version': versions,
+                'week_two': {
+                    'eligible': eligible, 'returned': returned,
+                    'cohort_start': utc_day(start), 'cohort_end': utc_day(end - DAY),
+                },
             }

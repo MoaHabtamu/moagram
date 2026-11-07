@@ -9,9 +9,10 @@
 | `TMessagesProj/` | Shared Android client, Java code, resources, and native libraries |
 | `TMessagesProj_AppStandalone/` | Standalone APK packaging, signing configuration, and application loader |
 | `TMessagesProj/src/main/java/org/telegram/messenger/LocalRepeatController.java` | Local rule storage, queue reconciliation, transport, retry, and recovery |
+| `TMessagesProj/src/main/java/org/telegram/messenger/LocalRepeatRefill.java` | Inexact background wakeup and the paused-rule notification |
 | `TMessagesProj/src/main/java/org/telegram/messenger/RepeatSchedule.java` | Cadence calculations and queue limits |
-| `TMessagesProj/src/main/java/org/telegram/messenger/MoagramUsage.java` | Anonymous daily-open report from each phone |
-| `Tools/stats/` | Collector and the report of phones that opened Moagram |
+| `TMessagesProj/src/main/java/org/telegram/messenger/MoagramUsage.java` | Daily activity report per install, scheduled by UTC date |
+| `Tools/stats/` | Collector and the report of installs active in Moagram |
 | `Tools/stats/cloudflare/` | The same collector as a Cloudflare Worker |
 | `TMessagesProj/src/main/java/org/telegram/ui/Components/AlertsCreator.java` | Repeat picker and Manage Repeats UI |
 | `TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java` | Compose scheduling callbacks |
@@ -25,7 +26,7 @@ Other app modules and most native/vendor code are inherited from Telegram. Prefe
 
 ## Repeat architecture
 
-Free-account repeat rules live in per-account local preferences. `LocalRepeatController` uses the existing account timer to reconcile them against Telegram's scheduled-message history, then adds future ordinary scheduled messages while the app is active and connected. `RepeatSchedule` supplies fixed intervals, lead time, horizon, and queue caps.
+Free-account repeat rules live in per-account local preferences. `LocalRepeatController` uses the existing account timer to reconcile them against Telegram's scheduled-message history, then adds future ordinary scheduled messages while the app is active and connected. `LocalRepeatRefill` also asks Android for an inexact wakeup about every twelve hours, resumes the network for up to 90 seconds, and runs the same refill. A full-looking local queue is reconciled once, because it can be stale. A paused rule posts a notification instead of scheduling a wakeup. Android may delay or block that wakeup. `RepeatSchedule` supplies fixed intervals, lead time, horizon, and queue caps.
 
 Telegram stores and sends already queued messages. The local controller is responsible for replenishment, retry/recovery, and cancellation. Premium repeat requests retain the native server path. Test adapters under `Tools/tests/jvm` are outside Android source sets and are never packaged in the app.
 
@@ -38,7 +39,7 @@ After completing the [build setup](BUILDING.md), compile the real Telegram class
 bash Tools/tests/run-local-repeats.sh
 ```
 
-The current suite reports 758 checks: 32 scheduling callback checks, 18 passcode-flow checks, 55 Ghost Mode request checks, 518 photo-permission checks, 21 interval checks, 16 protocol checks, and 98 queue checks. It covers seven-occurrence queues, three rules producing 21 occurrences, restart without duplication, replenishment, cancellation, recovery, and errors. Passcode checks execute the production success dispatcher and input-mode selection, covering hidden-chat callbacks, app settings, and Telegram's wallet authorization path. Request checks execute the production read/story guards and background-send flags with a recording transport, including one-shot read allowances and account isolation. Photo checks execute the production sharing and secure-window conditions and rich-media parent lookup, covering protected articles with the Moagram saving option enabled and disabled. This is simulated transport and UI-dispatch coverage, not a live delivery or security audit.
+The current suite reports 765 checks: 32 scheduling callback checks, 18 passcode-flow checks, 55 Ghost Mode request checks, 518 photo-permission checks, 21 interval checks, 16 protocol checks, and 105 queue checks. It covers seven-occurrence queues, three rules producing 21 occurrences, restart without duplication, replenishment, cancellation, recovery, errors, and when a background refill should wake. Passcode checks execute the production success dispatcher and input-mode selection, covering hidden-chat callbacks, app settings, and Telegram's wallet authorization path. Request checks execute the production read/story guards and background-send flags with a recording transport, including one-shot read allowances and account isolation. Photo checks execute the production sharing and secure-window conditions and rich-media parent lookup, covering protected articles with the Moagram saving option enabled and disabled. This is simulated transport and UI-dispatch coverage, not a live delivery or security audit.
 
 The runner also executes 36 in-app update policy/signature checks and nine release-feed tests. These cover the daily reminder boundary, version/Android compatibility, URL restrictions, corrupted downloads, cryptographic signature verification, wrong signing identities, and release metadata mismatches. See [In-app updates](IN_APP_UPDATES.md).
 

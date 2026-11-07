@@ -70,6 +70,11 @@ public final class MoagramUpdateController {
     public boolean needsInstallPermission() {
         return Build.VERSION.SDK_INT >= 26 && !context().getPackageManager().canRequestPackageInstalls();
     }
+    public String installationInfo() {
+        return LocaleController.getString(needsInstallPermission()
+                ? R.string.MoagramUpdatePermissionInfo : R.string.MoagramUpdateReady)
+                + "\n\n" + LocaleController.getString(R.string.MoagramUpdatePlayProtectInfo);
+    }
     public boolean ready() { return readyApk != null && readyApk.isFile(); }
     public long downloadedBytes() { return bytes; }
     public MoagramUpdatePolicy policy() { return policy; }
@@ -188,8 +193,7 @@ public final class MoagramUpdateController {
                 || ApplicationLoader.mainInterfacePaused || SharedConfig.appLocked || !ready() || installDialog != null) return;
         AlertDialog.Builder builder = new AlertDialog.Builder(activity);
         builder.setTitle(LocaleController.getString(R.string.MoagramUpdateReadyTitle));
-        builder.setMessage(LocaleController.getString(needsInstallPermission()
-                ? R.string.MoagramUpdatePermissionInfo : R.string.MoagramUpdateReady));
+        builder.setMessage(installationInfo());
         builder.setPositiveButton(LocaleController.getString(needsInstallPermission()
                 ? R.string.MoagramAllowInstall : R.string.MoagramInstallUpdate), (dialog, which) -> install(activity));
         builder.setNegativeButton(LocaleController.getString(R.string.MoagramUpdateLater), null);

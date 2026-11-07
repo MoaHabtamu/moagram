@@ -4,7 +4,7 @@
 
 ## Repeating scheduled messages
 
-Free accounts use a rule saved on the device to keep ordinary Telegram scheduled messages queued ahead. Premium accounts retain Telegram's native repeat path. Read the [repeat guide](REPEATING_MESSAGES.md) before relying on a long-running schedule.
+Free accounts use a rule saved on the device to keep ordinary Telegram scheduled messages queued ahead. Moagram also asks Android for a wakeup about every twelve hours to refill that queue while the app is closed. Android can delay or block that wakeup, so opening the app remains the reliable way to refill. A paused rule posts a notification that opens Manage Repeats. Premium accounts retain Telegram's native repeat path. Read the [repeat guide](REPEATING_MESSAGES.md) before relying on a long-running schedule.
 
 ## Ghost Mode
 

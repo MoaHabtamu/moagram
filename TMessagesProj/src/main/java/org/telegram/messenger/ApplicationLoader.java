@@ -337,6 +337,7 @@ public class ApplicationLoader extends Application {
                 super.onActivityStarted(activity);
                 if (wasInBackground) {
                     ensureCurrentNetworkGet(true);
+                    startPushService();
                 }
                 MoagramUsage.onForeground();
             }
@@ -352,6 +353,8 @@ public class ApplicationLoader extends Application {
         applicationHandler = new Handler(applicationContext.getMainLooper());
 
         AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
+        LocalRepeatController.onRulesChanged = LocalRepeatRefill::schedule;
+        LocalRepeatRefill.schedule();
 
         LauncherIconController.tryFixLauncherIconIfNeeded();
         ProxyRotationController.init();
@@ -371,16 +374,29 @@ public class ApplicationLoader extends Application {
         if (preferences.contains("pushService")) {
             enabled = preferences.getBoolean("pushService", true);
         } else {
-            enabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", false);
+            enabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", true);
         }
         if (enabled) {
             try {
-                applicationContext.startService(new Intent(applicationContext, NotificationsService.class));
+                Intent intent = new Intent(applicationContext, NotificationsService.class);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    applicationContext.startForegroundService(intent);
+                } else {
+                    applicationContext.startService(intent);
+                }
+            } catch (Throwable e) {
+                try {
+                    applicationContext.startService(new Intent(applicationContext, NotificationsService.class));
+                } catch (Throwable ignore) {
+
+                }
+            }
+        } else {
+            try {
+                applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
             } catch (Throwable ignore) {
 
             }
-        } else {
-            applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
         }
     }
 
@@ -441,6 +457,14 @@ public class ApplicationLoader extends Application {
                             @Override
                             public void onAvailable(@NonNull Network network) {
                                 lastKnownNetworkType = -1;
+                                AndroidUtilities.runOnUIThread(() -> {
+                                    for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
+                                        if (UserConfig.getInstance(a).isClientActivated()) {
+                                            ConnectionsManager.getInstance(a).checkConnection();
+                                            ConnectionsManager.getInstance(a).resumeNetworkMaybe();
+                                        }
+                                    }
+                                });
                             }
 
                             @Override

@@ -20,7 +20,7 @@ The development source is based on Telegram **13.1.1** and requires **Android 6.
 
 | Feature | What it does |
 | --- | --- |
-| **Repeating messages** | Queue up to seven future occurrences per local rule on free accounts, replenished while Moagram runs and connects. |
+| **Repeating messages** | Queue up to seven future occurrences per local rule on free accounts. Moagram tries to refill them about every twelve hours while the app is closed. Opening the app is the reliable path if Android delays that wakeup. |
 | **Manage Repeats** | See queued counts, inspect errors, retry a paused rule, or stop a series. |
 | **Ghost Mode** | Configure online-presence, typing, read-receipt, and story-view behavior per account. |
 | **Hidden chats** | Hide selected chats from the normal list, choose opening shortcuts, and configure a passcode and notifications. |

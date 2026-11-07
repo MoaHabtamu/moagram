@@ -28,6 +28,10 @@ On a standalone Moagram installation with a newer compatible release in the feed
    download. Confirm that the ready dialog and release card explain the permission
    restriction and offer **Allow installation**. Returning without granting it must
    retain the verified APK and avoid reopening Settings automatically.
+   Both the dialog and page should also explain a possible Play Protect scan.
+   Repeat with installation permission already granted: the explanation must
+   still appear, and **Install update** must open Android's installer without an
+   extra Moagram confirmation. A scan result must never be described as guaranteed.
 4. Enable that permission and return. Android's package installer should open once,
    without another download. Cancel the installer and return: it should stay closed
    until **Install update** is tapped again.
@@ -39,3 +43,7 @@ On a standalone Moagram installation with a newer compatible release in the feed
 7. Check narrow screens, large text, RTL, light/dark themes, gesture navigation,
    and three-button navigation. The page must scroll, and the bottom bar must not
    cover content or Android navigation.
+
+Before activating a public feed, complete and record the actual Play Protect
+device test in [the release guide](../updates/README.md#play-protect-device-test-before-release).
+The automated tests validate record handling; they do not run Google's scanner.

@@ -72,8 +72,9 @@ stubs = {
         public static final int GET_SIGNING_CERTIFICATES=1, GET_SIGNATURES=2;
         public boolean allowed;
         public int installed=1;
+        public int archiveVersion=2;
         public PackageInfo getPackageInfo(String p,int f) { PackageInfo i=new PackageInfo(); i.versionCode=installed; return i; }
-        public PackageInfo getPackageArchiveInfo(String p,int f) { PackageInfo i=new PackageInfo(); i.versionCode=2; return i; }
+        public PackageInfo getPackageArchiveInfo(String p,int f) { PackageInfo i=new PackageInfo(); i.versionCode=archiveVersion; return i; }
         public boolean canRequestPackageInstalls() { return allowed; }
     }''',
     'android/net/Uri': 'public class Uri { public static Uri parse(String s) { return new Uri(); } }',

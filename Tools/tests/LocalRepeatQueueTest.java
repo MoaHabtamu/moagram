@@ -31,6 +31,10 @@ public class LocalRepeatQueueTest {
         check(server.messages.size() == 7, "Expected 7 queued messages; got " + server.messages.size()
                 + ", paused=" + server.controller.getRepeats(12).get(0).paused);
         check(server.controller.getRepeats(12).get(0).queued == 7, "Manager queue count is incorrect");
+        check(server.controller.needsWake(), "A full queue should still be checked in the background");
+        check(!server.controller.needsImmediate(), "A full queue does not need another immediate refill");
+        check(server.controller.pausedDialog() == 0, "A healthy queue should not raise a paused-rule notification");
+        check(server.controller.nextDelayMillis() == LocalRepeatController.REFILL_INTERVAL_MS, "A full queue waits twelve hours");
         for (int i = 0; i < 7; i++) {
             check(server.hasDate(12, firstDate + i * 86400), "Missing future occurrence " + i);
         }
@@ -101,6 +105,9 @@ public class LocalRepeatQueueTest {
         LocalRepeatController.RepeatInfo info = server.controller.getRepeats(12).get(0);
         check(server.messages.size() == 1 && info.paused, "Permanent error should pause replenishment");
         check("CHAT_WRITE_FORBIDDEN".equals(info.error), "Actual server error is not visible");
+        check(!server.controller.needsWake(), "A paused rule should not schedule a background refill");
+        check(server.controller.pausedDialog() == 12, "The paused notification should open the affected chat");
+        check(server.controller.nextDelayMillis() == 0, "A paused-only account has nothing to wake for");
         server.failRefills = false;
         server.controller.retry(info.id);
         server.advance(30000);

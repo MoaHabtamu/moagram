@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Show how many phones opened Moagram.
+"""Show how many installs reported activity in Moagram.
 
 Counts come from the usage collector, once a build that reports them is
 installed and usage_url is set in updates/android.json.
@@ -112,8 +112,7 @@ def print_usage(db):
         return
     url = event_url()
     if not url.startswith('https://') or not url.endswith('/v1/event'):
-        print('  No phones are reporting yet.')
-        print('  The published app does not send this, and updates/android.json has no usage_url.')
+        print('  No usage collector is configured.')
         print('  Publish Tools/stats/cloudflare with bash setup.sh, set usage_url')
         print('  to https://YOUR-WORKER.workers.dev/v1/event, and install a build that contains the counter.')
         return
@@ -143,10 +142,24 @@ def print_usage(db):
 
 def print_summary(summary):
     heard = int(summary.get('new_installs') or 0) + int(summary.get('existing_installs') or 0)
-    print(f"  Opened Moagram in the last day: {summary.get('active_1d', 0)}")
-    print(f"  Opened Moagram in the last 7 days: {summary.get('active_7d', 0)}")
-    print(f"  Opened Moagram in the last 30 days: {summary.get('active_30d', 0)}")
-    print(f"  Phones that have reported: {heard}")
+    print(f"  Installs reporting in the last 24 hours: {summary.get('active_1d', 0)}")
+    print(f"  Installs reporting in the last 7 days: {summary.get('active_7d', 0)}")
+    print(f"  Installs reporting in the last 30 days: {summary.get('active_30d', 0)}")
+    print(f"  Installs that have reported: {heard}")
+    active = summary.get('active_30d') or 0
+    for version in summary.get('by_version') or []:
+        count = version.get('active_30d') or 0
+        if count and active:
+            name = version.get('version_name') or 'Unnamed version'
+            print(f"  {name} (build {version['version_code']}): {count} active installs ({100 * count / active:.1f}%)")
+    retention = summary.get('week_two')
+    if retention:
+        eligible, returned = retention['eligible'], retention['returned']
+        if eligible:
+            print(f"  Returned in week two: {returned}/{eligible} ({100 * returned / eligible:.1f}%)")
+        else:
+            print('  Returned in week two: not enough history yet')
+        print(f"  First-report cohort: {retention['cohort_start']} through {retention['cohort_end']} UTC")
 
 
 def main():

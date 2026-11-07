@@ -21,7 +21,7 @@ public class GhostModeController {
         return result;
     }
 
-    public boolean enabled;
+    public volatile boolean enabled;
     public boolean hideOnline = true;
     public boolean hideTyping = true;
     public boolean ghostRead = true;
@@ -29,9 +29,11 @@ public class GhostModeController {
     public boolean hideStories = true;
     public boolean stealthSend = true;
 
+    private final int currentAccount;
     private final SharedPreferences preferences;
 
     private GhostModeController(int account) {
+        currentAccount = account;
         preferences = ApplicationLoader.applicationContext.getSharedPreferences("ghost_mode_account_" + account, Context.MODE_PRIVATE);
         SharedPreferences global = ApplicationLoader.applicationContext.getSharedPreferences("userconfing", Context.MODE_PRIVATE);
         boolean migrateCurrentAccount = account == UserConfig.selectedAccount && !global.getBoolean("ghostModeAccountMigrationDone", false);
@@ -53,6 +55,15 @@ public class GhostModeController {
     public boolean isGhostRead() { return enabled && ghostRead; }
     public boolean isStoriesHidden() { return enabled && hideStories; }
     public boolean isStealthSend() { return enabled && stealthSend; }
+
+    public void setEnabled(boolean value) {
+        if (enabled == value) {
+            return;
+        }
+        enabled = value;
+        save();
+        NotificationCenter.getInstance(currentAccount).postNotificationName(NotificationCenter.ghostModeChanged);
+    }
 
     public void save() {
         preferences.edit()

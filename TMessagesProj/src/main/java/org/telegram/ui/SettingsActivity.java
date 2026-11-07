@@ -221,6 +221,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         getNotificationCenter().addObserver(this, NotificationCenter.updateInterfaces);
         getNotificationCenter().addObserver(this, NotificationCenter.starBalanceUpdated);
         getNotificationCenter().addObserver(this, NotificationCenter.newSuggestionsAvailable);
+        getNotificationCenter().addObserver(this, NotificationCenter.ghostModeChanged);
 
         if (arguments != null) {
             hasMainTabs = arguments.getBoolean("hasMainTabs", false);
@@ -524,11 +525,16 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
         getNotificationCenter().removeObserver(this, NotificationCenter.updateInterfaces);
         getNotificationCenter().removeObserver(this, NotificationCenter.starBalanceUpdated);
         getNotificationCenter().removeObserver(this, NotificationCenter.newSuggestionsAvailable);
+        getNotificationCenter().removeObserver(this, NotificationCenter.ghostModeChanged);
     }
 
     @Override
     public void didReceivedNotification(int id, int account, Object... args) {
-        if (id == NotificationCenter.starBalanceUpdated) {
+        if (id == NotificationCenter.ghostModeChanged) {
+            if (listView != null && listView.adapter != null) {
+                listView.adapter.update(false);
+            }
+        } else if (id == NotificationCenter.starBalanceUpdated) {
             setInfo();
             if (listView != null) {
                 listView.adapter.update(true);
@@ -635,8 +641,9 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
     @Override
     public void onResume() {
         super.onResume();
-        if (listView.adapter != null) {
-            listView.adapter.notifyDataSetChanged();
+        if (listView != null && listView.adapter != null) {
+            // UniversalAdapter stores snapshot values; rebinding alone keeps old On/Off labels.
+            listView.adapter.update(false);
         }
     }
 
@@ -857,7 +864,7 @@ public class SettingsActivity extends BaseFragment implements NotificationCenter
                 presentSettingFragment(new PrivacySettingsActivity());
                 break;
             case 4:
-                presentSettingFragment(new GhostModeActivity());
+                presentSettingFragment(new GhostModeActivity(currentAccount));
                 break;
             case ID_MOAGRAM_UPDATES:
                 presentSettingFragment(new MoagramUpdatesActivity());

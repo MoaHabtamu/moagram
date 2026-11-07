@@ -61,7 +61,11 @@
     <string name="ViewersCopied">Viewer list copied to clipboard</string>
     <string name="LocalRepeatTitle">Repeating Messages</string>
     <string name="LocalRepeatError">Scheduling error: %1$s</string>
-    <string name="LocalRepeatInfo">Moagram queues up to 7 upcoming occurrences. Open this app online periodically to keep repeats going. Deleting an occurrence skips it; use Manage Repeats to stop the series.</string>
+    <string name="LocalRepeatInfo">Moagram keeps the next 7 occurrences queued, including while the app is closed. Missed times are skipped. Deleting an occurrence skips it; use Manage Repeats to stop the series.</string>
+    <string name="LocalRepeatRefillChannel">Repeating messages</string>
+    <string name="LocalRepeatRefillTitle">A repeating message is paused</string>
+    <string name="LocalRepeatRefillText">Open Manage Repeats and tap Retry.</string>
+    <string name="LocalRepeatRefillTextMany">%1$d repeating messages are paused. Open Manage Repeats and tap Retry.</string>
     <string name="LocalRepeatManage">Manage Repeats</string>
     <string name="LocalRepeatEmpty">No repeating messages in this chat.</string>
     <string name="LocalRepeatMedia">Media message</string>
@@ -102,9 +106,10 @@
     <string name="MoagramUpdateReadyTitle">Ready to install</string>
     <string name="MoagramAllowInstall">Allow installation</string>
     <string name="MoagramUpdatePermissionInfo">Your update is downloaded and verified, but Android hasn’t allowed Moagram to install it yet. Tap Allow installation, turn on “Allow from this source” for Moagram, then return. The installer will open automatically—no need to download again.</string>
+    <string name="MoagramUpdatePlayProtectInfo">Google Play Protect may ask to scan this update because it was downloaded outside Google Play. Choose “Scan app” if prompted and wait for the result. If it reports a threat, cancel the installation.</string>
     <string name="MoagramPreparingInstall">Preparing installer…</string>
     <string name="MoagramUpdateAttention">Update needs attention</string>
     <string name="MoagramUpdateNeedsAttention">Update needs attention</string>
     <string name="MoagramUsageCount">Count this install</string>
-    <string name="MoagramUsageCountInfo">Sends a random install id and the app version so new installs can be counted separately from updates, along with how many people open Moagram. Your Telegram account, phone number, and messages stay on this phone.</string>
+    <string name="MoagramUsageCountInfo">Sends a random install id and the app version so new installs can be counted separately from updates, along with how many installs report activity. Reports do not include your Telegram account, phone number, or messages.</string>
 </resources>

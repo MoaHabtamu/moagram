@@ -4577,7 +4577,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             } else if (position == privacyRow) {
                 presentFragment(new PrivacySettingsActivity().setCurrentPassword(currentPassword));
             } else if (position == ghostModeRow) {
-                presentFragment(new GhostModeActivity());
+                presentFragment(new GhostModeActivity(currentAccount));
             } else if (position == dataRow) {
                 presentFragment(new DataSettingsActivity());
             } else if (position == chatRow) {
@@ -14818,7 +14818,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     new SearchResult(12, getString(R.string.NotificationsServiceConnection), "notificationsServiceConnectionRow", getString(R.string.NotificationsAndSounds), R.drawable.msg_notifications, () -> f.presentFragment(new NotificationsSettingsActivity())),
                     new SearchResult(13, getString(R.string.RepeatNotifications), "repeatRow", getString(R.string.NotificationsAndSounds), R.drawable.msg_notifications, () -> f.presentFragment(new NotificationsSettingsActivity())),
 
-                    new SearchResult(150, getString(R.string.GhostMode), R.drawable.msg_stories_stealth, () -> f.presentFragment(new GhostModeActivity())),
+                    new SearchResult(150, getString(R.string.GhostMode), R.drawable.msg_stories_stealth, () -> f.presentFragment(new GhostModeActivity(currentAccount))),
                     new SearchResult(100, getString(R.string.PrivacySettings), R.drawable.msg_secret, () -> f.presentFragment(new PrivacySettingsActivity())).withLink("tg://settings/privacy"),
                     new SearchResult(109, getString(R.string.TwoStepVerification), getString(R.string.PrivacySettings), R.drawable.msg2_secret, () -> f.presentFragment(new TwoStepVerificationActivity())).withLink("tg://settings/privacy/2sv"),
                     new SearchResult(124, getString(R.string.AutoDeleteMessages), getString(R.string.PrivacySettings), R.drawable.msg2_secret, () -> {

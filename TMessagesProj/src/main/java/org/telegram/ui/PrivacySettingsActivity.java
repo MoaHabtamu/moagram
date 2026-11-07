@@ -415,7 +415,7 @@ public class PrivacySettingsActivity extends BaseFragment implements Notificatio
             } else if (position == lastSeenRow) {
                 presentFragment(new PrivacyControlActivity(ContactsController.PRIVACY_RULES_TYPE_LASTSEEN));
             } else if (position == ghostModeRow) {
-                presentFragment(new GhostModeActivity());
+                presentFragment(new GhostModeActivity(currentAccount));
             } else if (position == phoneNumberRow) {
                 presentFragment(new PrivacyControlActivity(ContactsController.PRIVACY_RULES_TYPE_PHONE));
             } else if (position == groupsRow) {

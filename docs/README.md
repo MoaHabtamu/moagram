@@ -9,7 +9,8 @@ Start with the guide that matches what you want to do.
 | [Repeating messages](REPEATING_MESSAGES.md) | Scheduling, queue behavior, supported content, and troubleshooting |
 | [Building](BUILDING.md) | Android tools, local settings, signing, and APK output |
 | [In-app updates](IN_APP_UPDATES.md) | Manual updates and maintainer-controlled critical reminders |
-| [Active use](USAGE_COUNTS.md) | Phones that opened Moagram |
+| [Active use](USAGE_COUNTS.md) | Installs reporting activity in Moagram |
+| [Google Play distribution](PLAY_DISTRIBUTION.md) | Owner account setup, Play edition preparation, and standalone scan tests |
 | [Development](DEVELOPMENT.md) | Code map, regression checks, and device testing |
 | [Upstream](UPSTREAM.md) | Telegram attribution, inherited configuration, and third-party components |
 

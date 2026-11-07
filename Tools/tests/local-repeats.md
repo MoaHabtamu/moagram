@@ -2,9 +2,13 @@
 
 Free accounts use a recurrence rule saved on the device, and ordinary Telegram scheduled messages.
 Each series queues up to seven future occurrences, within a 364-day horizon and a shared limit of
-90 queued messages per chat. The existing account timer replenishes the queue while connected.
-Already queued messages send without the device online. Missed occurrences are skipped; rules
-do not produce a backlog when the app reconnects. Intervals match Telegram's fixed day counts.
+90 queued messages per chat. The account timer replenishes the queue while connected. A background
+wakeup, about every twelve hours, resumes the network briefly and runs the same refill while the
+app is closed. Android may delay or block that wakeup. A full local queue still gets one reconcile,
+because the saved queue can be stale. A short queue retries in about fifteen minutes. A paused rule
+does not schedule a wakeup; it posts a notification that opens Manage Repeats. Already queued
+messages send without the device online. Missed occurrences are skipped; rules do not produce a
+backlog when the app reconnects. Intervals match Telegram's fixed day counts.
 
 Rules are separate for each account and removed on logout. Stop a series from **Manage Repeats**
 in the chat menu, scheduled-message screen, or schedule picker. Stopping while offline saves the
@@ -39,7 +43,8 @@ The queue test runs the production controller with an injected clock, in-memory 
 a simulated Telegram transport. It reproduces the former one-message/paused state caused by
 capturing a `send_as` object whose flag was disabled, and checks seven daily occurrences,
 restart without duplicates, replenishment, stopping, three rules producing 21 occurrences,
-repairing a saved paused rule, and visible/retryable server errors. Its JSON adapters use Gson
+repairing a saved paused rule, visible/retryable server errors, and the background wakeup decision
+for a full queue and a paused rule. Its JSON adapters use Gson
 from the machine or the existing Gradle cache; `REPEAT_GSON_JAR` can supply its path explicitly.
 This is a simulated transport test, not a live Telegram delivery test.
 

@@ -2,7 +2,7 @@
 """Collect anonymous Moagram install and activity counts.
 
 Listens on 127.0.0.1:8787. Put it behind HTTPS and set updates/android.json
-usage_url to https://YOUR-HOST/v1/event. Phones that have the counting build
+usage_url to https://YOUR-HOST/v1/event. Installs that have the counting build
 then report a fresh install, an update, or a daily open.
 """
 import argparse
@@ -28,10 +28,10 @@ class Handler(BaseHTTPRequestHandler):
             summary = STORE.summary(self._now())
             heard = summary['new_installs'] + summary['existing_installs']
             text = (
-                f"Opened Moagram in the last day: {summary['active_1d']}\n"
-                f"Opened Moagram in the last 7 days: {summary['active_7d']}\n"
-                f"Opened Moagram in the last 30 days: {summary['active_30d']}\n"
-                f"Phones that have reported: {heard}\n"
+                f"Installs reporting in the last 24 hours: {summary['active_1d']}\n"
+                f"Installs reporting in the last 7 days: {summary['active_7d']}\n"
+                f"Installs reporting in the last 30 days: {summary['active_30d']}\n"
+                f"Installs that have reported: {heard}\n"
             )
             self._send(200, text.encode(), 'text/plain; charset=utf-8')
             return

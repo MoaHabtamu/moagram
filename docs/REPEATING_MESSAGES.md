@@ -19,9 +19,9 @@ A free-account local rule keeps **up to seven future occurrences** queued. Queue
 | Three Daily rules at 09:00, 09:01, and 09:02 | Seven per rule, up to 21 messages total |
 | One Weekly rule | Up to seven weekly occurrences |
 
-The first selected date is the start of the series. Seven occurrences does not always mean seven days. As messages leave the queue, Moagram replenishes it while the app runs and connects. The series continues until stopped or interrupted by a condition requiring attention; it is not an independent always-on service.
+The first selected date is the start of the series. Seven occurrences does not always mean seven days. As messages leave the queue, Moagram adds the next future dates. It does this while the app is open, and it also asks Android for a wakeup about every twelve hours so the queue can be refilled while the app is closed. That wakeup is not exact. Android may delay it, and a force-stop or a strict battery limit can block it. Opening Moagram is still the reliable way to refill. The series continues until stopped or interrupted by a condition requiring attention.
 
-Already queued messages are sent by Telegram even if this device is offline. If the app stays offline long enough to exhaust the queue, the series cannot continue until it reconnects. Missed dates are skipped instead of sending a backlog. Simply having the app installed does not guarantee replenishment if Android suspends it.
+Already queued messages are sent by Telegram even if this device is offline. If those seven occurrences are all sent before Moagram refills the queue, later dates are skipped. Missed dates are never sent as a backlog. A paused rule shows a notification. Open that chat and tap Retry in Manage Repeats. Rules stay on this phone. The wakeup is armed when you open Moagram, and again after the phone restarts.
 
 ## Intervals and limits
 
@@ -62,7 +62,7 @@ Rules are stored separately per account on this device and cleared on logout. Th
 | Only one scheduled message, no local rule | Confirm you selected a repeat interval before scheduling, that the message type is supported, and whether the account uses the native Premium path. |
 | A paused rule | Read its exact error in Manage Repeats, resolve the cause, then use Retry. Ambiguous recovery pauses for review instead of risking duplicates. |
 | Fewer than seven occurrences | Check the 364-day horizon, the chat's scheduled queue, connectivity, and server errors. |
-| Series stopped after time offline | Open Moagram and reconnect. Missed dates are skipped; confirm new future occurrences appear. |
+| Series stopped after time offline | Open Moagram and reconnect. Missed dates are skipped; confirm new future occurrences appear. If a notification says a repeat is paused, open Manage Repeats and tap Retry. |
 | An edited message did not change later messages | Edits affect the selected occurrence only. Stop and recreate the rule to change its template. |
 
 For a reproducible problem, use the [bug report form](https://github.com/MoaHabtamu/moagram/issues/new?template=bug_report.yml). Include the interval, selected first date/time, time zone, queued count, free/Premium account type, and exact error text. See [test coverage](../Tools/tests/local-repeats.md) for technical details.

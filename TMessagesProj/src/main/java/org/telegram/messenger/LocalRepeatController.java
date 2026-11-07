@@ -74,6 +74,11 @@ public final class LocalRepeatController extends BaseController {
         void updates(TLRPC.Updates updates);
     }
 
+    /** Set by the application once Android is available. Tests leave this unset. */
+    public static Runnable onRulesChanged;
+    public static final long REFILL_INTERVAL_MS = 12L * 60 * 60 * 1000;
+    public static final long REFILL_RETRY_MS = 15L * 60 * 1000;
+
     private final Backend backend;
     private final SharedPreferences preferences;
     private final ArrayList<Rule> rules = new ArrayList<>();
@@ -173,6 +178,70 @@ public final class LocalRepeatController extends BaseController {
         ownerId = 0;
         checking = false;
         preferences.edit().clear().commit();
+        noteChanged();
+    }
+
+    /** An active or stopping rule should be checked even if the local queue still looks full. */
+    public synchronized boolean needsWake() {
+        for (Rule rule : rules) {
+            if (rule.stopping || !rule.paused) return true;
+        }
+        return false;
+    }
+
+    /** The local queue has room, a cancellation still has to reach Telegram, or a check is in flight. */
+    public synchronized boolean needsImmediate() {
+        if (checking) return true;
+        long now = backend.now();
+        for (Rule rule : rules) {
+            if (rule.paused && !rule.stopping) continue;
+            if (rule.retryAt > now) continue;
+            if (rule.stopping || rule.pendingRandom != 0 || rule.queued.size() < RepeatSchedule.QUEUE_SIZE) return true;
+        }
+        return false;
+    }
+
+    public synchronized long pausedDialog() {
+        for (Rule rule : rules) if (rule.paused) return rule.dialogId;
+        return 0;
+    }
+
+    public synchronized int pausedCount() {
+        int count = 0;
+        for (Rule rule : rules) if (rule.paused) count++;
+        return count;
+    }
+
+    /** Milliseconds until the next background check. Zero means there is nothing to wake for. */
+    public synchronized long nextDelayMillis() {
+        if (!needsWake()) return 0;
+        if (checking) return REFILL_RETRY_MS;
+        long now = backend.now();
+        long retryWait = Long.MAX_VALUE;
+        boolean due = false;
+        for (Rule rule : rules) {
+            if (rule.paused && !rule.stopping) continue;
+            boolean shortQueue = rule.stopping || rule.pendingRandom != 0 || rule.queued.size() < RepeatSchedule.QUEUE_SIZE;
+            if (!shortQueue) continue;
+            if (rule.retryAt > now) retryWait = Math.min(retryWait, (rule.retryAt - now) * 1000L);
+            else due = true;
+        }
+        if (due) return REFILL_RETRY_MS;
+        if (retryWait != Long.MAX_VALUE) return Math.max(60_000L, Math.min(REFILL_INTERVAL_MS, retryWait));
+        return REFILL_INTERVAL_MS;
+    }
+
+    private void noteChanged() {
+        Runnable callback = onRulesChanged;
+        if (callback == null) return;
+        // schedule() locks every account, so it must not run while this controller's lock is held.
+        AndroidUtilities.runOnUIThread(() -> {
+            try {
+                callback.run();
+            } catch (Throwable e) {
+                FileLog.e(e);
+            }
+        });
     }
 
     /** Called immediately before serializing an outgoing request. */
@@ -736,7 +805,9 @@ public final class LocalRepeatController extends BaseController {
                 j.put("queued", queued);
                 array.put(j);
             }
-            return preferences.edit().putLong("owner", ownerId).putString("rules", array.toString()).commit();
+            boolean saved = preferences.edit().putLong("owner", ownerId).putString("rules", array.toString()).commit();
+            if (saved) noteChanged();
+            return saved;
         } catch (Exception e) { FileLog.e(e); return false; }
     }
 
