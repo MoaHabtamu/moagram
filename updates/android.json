@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "package_name": "org.moagram.messenger.web",
-  "version_code": 723789,
-  "version_name": "13.1.1-Moagram.9",
+  "version_code": 723799,
+  "version_name": "13.1.1-Moagram.10",
   "min_sdk": 23,
-  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.9/Moagram-13.1.1-preview.9.apk",
-  "sha256": "0189ddcc405f010d10511441e441901170d47f87090f82c991f157e6dd4282af",
-  "size": 71017765,
+  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.10/Moagram-13.1.1-preview.10.apk",
+  "sha256": "cdd9519c47410a86931e352c01a782512f276fb88abc522d0bdd548d76d5592d",
+  "size": 71017261,
   "critical_below_version_code": 723779,
-  "notes": "Message notifications now stay connected in the background.\n\nMoagram keeps its background push connection and foreground keep-alive service enabled by default so incoming messages arrive reliably even when the app is closed.\n",
-  "critical_message": "This update reports anonymous active use: a random install id and the app version, at most once a day. Your Telegram account, phone number, and messages stay on this phone. You can turn it off under Settings → Moagram Updates → Count this install.",
+  "notes": "Background notifications now run silently without a persistent keep-alive notification.\n\nMoagram keeps its background push connection active in memory and checks for messages in the background without placing an ongoing service notification in your notification shade.",
+  "critical_message": "This update reports anonymous active use: a random install id and the app version, at most once a day. Your Telegram account, phone number, and messages stay on this phone. You can turn it off under Settings \u2192 Moagram Updates \u2192 Count this install.",
   "usage_url": "https://moagram-usage.moagram-usage.workers.dev/v1/event"
 }
