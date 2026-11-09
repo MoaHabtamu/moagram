@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a normal upstream merge; leave the release branch and manual edits intact.
+"""Prepare upstream merges and promote only the exact candidate validated by CI.
 
 Run from the repository root in GitHub Actions. No third-party Python dependencies.
 """
@@ -8,6 +8,9 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
+import time
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -21,6 +24,17 @@ ISSUE_MARKER = "<!-- moagram-telegram-upstream -->"
 
 def git(*args, check=True):
     return subprocess.run(["git", *args], text=True, capture_output=True, check=check)
+
+
+def fetch(*args):
+    # Only source/branch metadata is needed here; native submodules belong in CI.
+    for attempt in range(3):
+        result = git("-c", "fetch.recurseSubmodules=false", "fetch", "--no-tags", *args, check=False)
+        if not result.returncode:
+            return result
+        if attempt == 2:
+            raise RuntimeError(result.stderr)
+        time.sleep(2 ** attempt)
 
 
 def ancestor(older, newer):
@@ -42,8 +56,17 @@ def api(method, endpoint, data=None):
         },
         method=method,
     )
-    with urlopen(request, timeout=60) as response:
-        return json.load(response)
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=60) as response:
+                return json.load(response)
+        except (HTTPError, URLError, TimeoutError) as error:
+            transient = not isinstance(error, HTTPError) or error.code in (429, 500, 502, 503, 504)
+            # A lost POST response may already have created a PR/issue. A later
+            # run discovers it; blindly repeating POST could create duplicates.
+            if method == "POST" or not transient or attempt == 2:
+                raise
+            time.sleep(2 ** attempt)
 
 
 def summary(message):
@@ -154,8 +177,9 @@ git push origin HEAD:{BRANCH}
 ```
 
 If the first merge conflicts, finish it before running the second merge.
-Rerun **Check Telegram updates** after pushing. It will open/update a draft PR
-and run Android checks. Review privacy, hidden chats, repeating messages,
+Rerun **Check Telegram updates** after pushing. It will open/update a PR,
+run Android checks, and merge the validated candidate automatically.
+Review privacy, hidden chats, repeating messages,
 branding, API configuration, signing, and version information before release.
 
 [Workflow run]({run}). No release or automatic merge was performed.
@@ -174,9 +198,11 @@ def merge_candidate(starting, base, target):
         result = git("merge", "--no-edit", "--no-ff", revision, check=False)
         if result.returncode:
             conflicts = git("diff", "--name-only", "--diff-filter=U").stdout.splitlines()
-            if conflicts == ["gradle.properties"] and resolve_properties():
-                git("commit", "--no-edit")
-                continue
+            if "gradle.properties" in conflicts and resolve_properties():
+                conflicts.remove("gradle.properties")
+                if not conflicts:
+                    git("commit", "--no-edit")
+                    continue
             git("merge", "--abort", check=False)
             if not conflicts:
                 raise RuntimeError(result.stderr or result.stdout)
@@ -191,10 +217,10 @@ def main():
     owner = repo.split("/")[0]
     git("config", "user.name", "github-actions[bot]")
     git("config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com")
-    git("fetch", "--no-tags", "origin", f"+refs/heads/{BASE}:refs/remotes/origin/{BASE}")
+    fetch("origin", f"+refs/heads/{BASE}:refs/remotes/origin/{BASE}")
     base_sha = git("rev-parse", f"origin/{BASE}").stdout.strip()
     # Do not rely on stale/missing Telegram release tags or fetch arbitrary forks.
-    git("fetch", "--no-tags", UPSTREAM, "master")
+    fetch(UPSTREAM, "master")
     target = git("rev-parse", "FETCH_HEAD").stdout.strip()
     properties = git("show", f"{target}:gradle.properties").stdout
     version = next(line.split("=", 1)[1] for line in properties.splitlines()
@@ -208,16 +234,18 @@ def main():
 
     query = urlencode({"state": "open", "head": f"{owner}:{BRANCH}", "base": BASE})
     pulls = api("GET", f"pulls?{query}")
+    if pulls and pulls[0].get("draft"):
+        stop_update("Update PR is draft. Mark it ready and rerun to resume automatic merging.")
     remote = git("ls-remote", "--heads", "origin", f"refs/heads/{BRANCH}").stdout.strip()
     starting = base_sha
     if remote:
-        git("fetch", "--no-tags", "origin", f"+refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}")
+        fetch("origin", f"+refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}")
         branch_sha = git("rev-parse", f"origin/{BRANCH}").stdout.strip()
         # A closed, unmerged PR is a deliberate pause. A manually repaired branch
         # with no PR yet is also valid; it can be picked up after conflict repair.
         closed_query = urlencode({"state": "closed", "head": f"{owner}:{BRANCH}", "base": BASE})
         closed = api("GET", f"pulls?{closed_query}") if not pulls else []
-        if not pulls and closed and not ancestor(branch_sha, base_sha):
+        if not pulls and closed and not closed[0].get("merged_at") and not ancestor(branch_sha, base_sha):
             stop_update("Update branch has a closed, unmerged PR. Reopen it or delete the branch to resume.")
         starting = branch_sha
 
@@ -236,7 +264,7 @@ def main():
     else:
         pull = api("POST", "pulls", {
             "title": f"Merge Telegram {version} into Moagram",
-            "head": BRANCH, "base": BASE, "draft": True,
+            "head": BRANCH, "base": BASE, "draft": False,
             "body": """Merge the official Telegram source into Moagram while retaining local commits.
 
 The **Check Telegram updates** workflow compiles Java, runs the repeat regression
@@ -244,14 +272,11 @@ suite, and builds a CI-only standalone APK against the exact candidate commit.
 Check the latest workflow run for results. The APK uses public dummy signing and
 has no Telegram API credentials; it is a compilation artifact, not a release.
 
-Before marking ready:
-- [ ] Review upstream changes and Moagram feature compatibility.
-- [ ] Verify repeating messages, hidden chats, and privacy controls on a device.
-- [ ] Review branding, credentials, signing, version information, and toolchain changes.
-- [ ] Confirm the latest update workflow passed for the current PR head.
-
-Merge this PR with **Create a merge commit** so future checks retain Telegram's
-ancestry. The workflow never merges or publishes a release automatically.
+After all checks pass, the workflow fast-forwards master to that exact tested
+merge commit, preserving Telegram's ancestry. Concurrent changes to master stop
+promotion and are included and tested on the next run. Convert this PR to draft
+or close it to pause automatic merging. Publishing a signed release is separate;
+review feature compatibility and perform device testing before release.
 """,
         })
     issue = conflict_issue()
@@ -259,9 +284,55 @@ ancestry. The workflow never merges or publishes a release automatically.
         api("PATCH", f"issues/{issue['number']}", {"state": "closed"})
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-            output.write(f"candidate={candidate}\n")
+            output.write(f"candidate={candidate}\npull_request={pull['number']}\n")
     summary(f"Telegram {version}: {pull['html_url']}\n\nCandidate: `{candidate}`. Android checks follow in this run.")
 
 
+def complete():
+    """Called only after successful validation, from the trusted workflow checkout.
+
+    A normal fast-forward push is atomic: it cannot include untested concurrent
+    master changes or overwrite them. GitHub marks the containing PR merged.
+    No candidate code runs in this job, which has repository write permission.
+    """
+    candidate = os.environ["CANDIDATE"]
+    number = os.environ["PULL_REQUEST"]
+    if not re.fullmatch(r"[0-9a-f]{40}", candidate) or not number.isdecimal():
+        stop_update("Invalid candidate or pull request number.")
+    pull = api("GET", f"pulls/{number}")
+    repo = os.environ["GITHUB_REPOSITORY"]
+    if (pull["head"]["repo"]["full_name"] != repo or pull["base"]["repo"]["full_name"] != repo
+            or pull["head"]["ref"] != BRANCH or pull["base"]["ref"] != BASE):
+        stop_update("Pull request no longer targets the expected update and master branches.")
+    if pull["head"]["sha"] != candidate:
+        stop_update("Update branch changed after validation. Rerun Check Telegram updates.")
+    if pull.get("merged_at"):
+        summary(f"Candidate `{candidate}` was already merged: {pull['html_url']}")
+        return
+    if pull["state"] != "open" or pull.get("draft"):
+        stop_update("Update PR is closed or draft. Reopen/mark ready and rerun to resume.")
+    fetch("origin", f"+refs/heads/{BASE}:refs/remotes/origin/{BASE}",
+          f"+refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}")
+    if git("rev-parse", f"origin/{BRANCH}").stdout.strip() != candidate:
+        stop_update("Update branch changed after validation. Rerun Check Telegram updates.")
+    base = git("rev-parse", f"origin/{BASE}").stdout.strip()
+    if ancestor(candidate, base):
+        summary(f"Master already contains validated candidate `{candidate}`.")
+        return
+    if not ancestor(base, candidate):
+        stop_update("Master changed after preparation. Rerun to merge and validate the new base.")
+    # Do not force: the server rechecks ancestry atomically, including changes
+    # arriving after our fetch. Branch protection is enforced by GitHub as usual.
+    result = git("push", "origin", f"{candidate}:refs/heads/{BASE}", check=False)
+    if result.returncode:
+        stop_update(f"Promotion was rejected; no changes overwritten. Rerun the checker.\n{result.stderr}")
+    summary(f"Merged validated candidate `{candidate}`: {pull['html_url']}. No release published.")
+
+
 if __name__ == "__main__":
-    main()
+    if sys.argv[1:] == ["--complete"]:
+        complete()
+    elif len(sys.argv) == 1:
+        main()
+    else:
+        raise SystemExit("Usage: sync-telegram.py [--complete]")

@@ -34,21 +34,33 @@ is published; it becomes available to Moagram once the source is public.
 - If the upstream commit is already in Moagram's `master`, nothing changes.
 - Otherwise, the checker tries ordinary merges into `codex/telegram-upstream`,
   retaining Moagram commits and any maintainer fixes already on that branch.
-  If only `gradle.properties` conflicts, it merges independent keys using Git's
+  If `gradle.properties` conflicts, it merges independent keys using Git's
   three versions of the file. This lets Telegram version changes coexist with
   Moagram's package settings. Different edits to the same key, duplicate keys,
   or unsupported property syntax still require manual resolution.
-- A successful merge opens a **draft pull request**. The same workflow calls
-  **Android checks** directly on the exact candidate commit, compiling Java,
-  running the repeat regression suite, and building the standalone APK. This
-  works without relying on another workflow being triggered by the bot's PR.
-- Conflicts abort the merge and open or update one issue with the affected files
-  and recovery commands. The workflow **fails** so blocked updates cannot appear
-  as successful checks. Unchanged conflicts do not produce another issue notification.
-  After resolving and pushing, rerun the checker. A successful candidate closes
-  the conflict issue; compilation or device testing may still find problems.
-- Pushes use normal fast-forward protection. The workflow never force-pushes,
-  auto-merges, changes the release branch, or publishes a release.
+- A successful merge opens a pull request. The same workflow calls **Android
+  checks** directly on the exact candidate commit: Python/Git safety tests, update
+  feed checks, Java compilation, repeat regressions, and a standalone APK build.
+  Bot-triggered PR workflows are not required for this path.
+- After **all** checks succeed, a separate job fast-forwards `master` to that
+  exact tested merge commit. Telegram's ancestry and Moagram's commits are retained;
+  GitHub marks the PR merged once its commits are reachable from `master`.
+  The promotion job runs scripts from the trusted workflow commit with write
+  permission; candidate builds have read permission and no personal secrets.
+- If `master` changes during validation, a normal push rejects divergent changes
+  atomically. The next run incorporates the new base and validates again. Changes
+  to the update branch also require another run. No force pushes are used.
+- Conflicts abort the merge and open or update one issue with affected files and
+  recovery commands. Unchanged conflicts do not produce another notification.
+  Independent `gradle.properties` keys are resolved even alongside other conflicts;
+  actual overlapping code edits still need a maintainer's decision. After resolving
+  and pushing, rerun the checker to validate and merge the repair.
+- Network fetches and idempotent API requests retry transient failures with bounded
+  backoff. A failed run can be rerun safely, including after a successful promotion.
+  Previously merged PRs do not pause later updates on the reused branch.
+- Failed tests, build failures, draft/closed PRs, and genuine conflicts stop the
+  workflow visibly. Convert the update PR to draft or close it to pause merging.
+  Signed APK releases and the published update feed remain a separate release step.
 
 The daily workflow is enabled only for `MoaHabtamu/moagram`. Fork owners must
 deliberately change that repository guard before enabling their own checker.
@@ -61,7 +73,9 @@ so new upstream strings can be appended without colliding with fork additions.
 Actions must be enabled. Under **Settings → Actions → General → Workflow
 permissions**, enable **Allow GitHub Actions to create and approve pull requests**.
 The workflow requests the specific write permissions it needs; it does not approve
-PRs. No personal access token, Telegram API secrets, or release signing key is
+PR reviews. `master` must permit the bot's normal fast-forward push. Repository
+branch protection is respected; a rule requiring PR-based merges blocks promotion
+and is reported as a failed run. No personal access token, Telegram API secrets, or release signing key is
 required. Organization policies can restrict these settings.
 
 Regular pull requests also run **Android checks**. You can run it manually on any
@@ -74,13 +88,14 @@ GitHub Actions minutes; review your account's allowance.
 
 ### Reviewing an update
 
-Inspect the latest **Check Telegram updates** run and confirm its candidate hash
-matches the PR head. Review the feature interactions and test repeating messages,
+Inspect the latest **Check Telegram updates** run and its candidate hash. Before
+publishing a signed release, review the feature interactions and test repeating messages,
 hidden chats, privacy controls, login, and upgrades on a device. Update version
 references in the documentation and adjust the CI toolchain if Telegram changes
 SDK/NDK/CMake requirements. A clean Git merge does not prove feature compatibility.
 
-Merge update PRs using **Create a merge commit**, preserving Telegram's ancestry.
+Automatic promotion retains the prepared merge commit and Telegram's ancestry.
+If merging an update PR manually, use **Create a merge commit**.
 Squashing or rebasing the update discards that relationship and can cause repeat
 update attempts. Closing an unmerged update PR pauses that branch: reopen it to
 continue, or delete the branch to let the next run start again from `master`.

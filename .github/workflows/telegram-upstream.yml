@@ -24,6 +24,7 @@ jobs:
       issues: write
     outputs:
       candidate: ${{ steps.update.outputs.candidate }}
+      pull_request: ${{ steps.update.outputs.pull_request }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -44,3 +45,23 @@ jobs:
     with:
       ref: ${{ needs.prepare.outputs.candidate }}
       build_apk: true
+
+  merge:
+    needs: [prepare, validate]
+    if: needs.prepare.outputs.candidate != '' && needs.validate.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      # Run the trusted orchestration code, never scripts from the candidate.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Merge the exact validated commit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE: ${{ needs.prepare.outputs.candidate }}
+          PULL_REQUEST: ${{ needs.prepare.outputs.pull_request }}
+        run: python3 Tools/upstream/sync-telegram.py --complete
