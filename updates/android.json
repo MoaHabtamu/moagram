@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "package_name": "org.moagram.messenger.web",
-  "version_code": 723799,
-  "version_name": "13.1.1-Moagram.10",
+  "version_code": 7237109,
+  "version_name": "13.1.1-Moagram.11",
   "min_sdk": 23,
-  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.10/Moagram-13.1.1-preview.10.apk",
-  "sha256": "cdd9519c47410a86931e352c01a782512f276fb88abc522d0bdd548d76d5592d",
-  "size": 71017261,
+  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.1.1-moagram.11/Moagram-13.1.1-preview.11.apk",
+  "sha256": "640d15f27e3ecc1fca7b9551d9467730ef54e292bad6cc4045e3f4441b72dc6a",
+  "size": 71015348,
   "critical_below_version_code": 723779,
-  "notes": "Background notifications now run silently without a persistent keep-alive notification.\n\nMoagram keeps its background push connection active in memory and checks for messages in the background without placing an ongoing service notification in your notification shade.",
-  "critical_message": "This update reports anonymous active use: a random install id and the app version, at most once a day. Your Telegram account, phone number, and messages stay on this phone. You can turn it off under Settings \u2192 Moagram Updates \u2192 Count this install.",
+  "notes": "Moagram preview 11 fixes the background notification service and simplifies search.\n\n- Restores the foreground keep-alive service with a silent ongoing notification.\n- Fixes keep-alive settings, background-start recovery, and account-specific background connection settings.\n- Restores normal search results for joined channels, groups, and their messages.\n\nEnable Keep-Alive Service and Background Connection in Notifications and Sounds for background delivery. Allow message notifications in Android settings.\n\nAndroid 6.0 or later. Update the existing installation to keep your accounts and settings.\n",
+  "critical_message": "This update reports anonymous active use: a random install id and the app version, at most once a day. Your Telegram account, phone number, and messages stay on this phone. You can turn it off under Settings → Moagram Updates → Count this install.",
   "usage_url": "https://moagram-usage.moagram-usage.workers.dev/v1/event"
 }
