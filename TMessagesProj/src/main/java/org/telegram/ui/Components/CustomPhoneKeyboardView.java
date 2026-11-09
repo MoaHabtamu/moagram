@@ -179,7 +179,6 @@ public class CustomPhoneKeyboardView extends ViewGroup {
         };
         backButton.setImageResource(R.drawable.msg_clear_input);
         ThemeBind.colorFilter(backButton, Theme.key_windowBackgroundWhiteBlackText, PorterDuff.Mode.SRC_ATOP);
-        int pad = dp(11);
         backButton.setPadding(pad, pad, pad, pad);
         backButton.setOnClickListener(v -> {});
         addView(views[11] = backButton);
