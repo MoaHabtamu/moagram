@@ -54,7 +54,7 @@ public class NotificationsService extends Service {
         super.onCreate();
         // Promote before account/database initialization, which can exceed the
         // startForegroundService deadline on a cold start.
-        foregroundStarted = startForegroundCompat();
+        foregroundStarted = startForegroundCompat(false);
     }
 
     @Override
@@ -65,6 +65,9 @@ public class NotificationsService extends Service {
             return START_NOT_STICKY;
         }
         ApplicationLoader.postInitApplication();
+        if (foregroundStarted) {
+            foregroundStarted = startForegroundCompat(true);
+        }
         if (!foregroundStarted) {
             onPushServiceTick(true, true);
             stopSelf();
@@ -196,12 +199,18 @@ public class NotificationsService extends Service {
         );
     }
 
-    private boolean startForegroundCompat() {
+    private boolean startForegroundCompat(boolean localized) {
         try {
+            // Release builds store translations in Telegram's assets and strip
+            // Android string resources. Use bootstrap text until LocaleController
+            // is initialized, then replace it with the user's translations.
+            String title = localized ? LocaleController.getString(R.string.NotificationsService) : "Moagram";
+            String text = localized ? LocaleController.getString(R.string.MoagramBackgroundConnectionActive)
+                    : "Background connection active for incoming messages";
             NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm != null) {
                 NotificationChannel channel = new NotificationChannel(CHANNEL_ID,
-                        getString(R.string.NotificationsService), NotificationManager.IMPORTANCE_LOW);
+                        title, NotificationManager.IMPORTANCE_LOW);
                 channel.setSound(null, null);
                 channel.enableVibration(false);
                 channel.setShowBadge(false);
@@ -214,8 +223,8 @@ public class NotificationsService extends Service {
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                     .setSmallIcon(R.drawable.notification)
-                    .setContentTitle(getString(R.string.NotificationsService))
-                    .setContentText(getString(R.string.MoagramBackgroundConnectionActive))
+                    .setContentTitle(title)
+                    .setContentText(text)
                     .setContentIntent(contentIntent)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
                     .setCategory(NotificationCompat.CATEGORY_SERVICE)

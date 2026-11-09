@@ -77,7 +77,7 @@ public class NotificationServiceTest {
     static class Context {
         static final String ALARM_SERVICE="alarm", NOTIFICATION_SERVICE="notification";
         Object getSystemService(String key) { return ALARM_SERVICE.equals(key) ? alarm : manager; }
-        String getString(int id) { return "resource-" + id; }
+        String getString(int id) { throw new IllegalStateException("Android strings are stripped in release builds"); }
         String getPackageName() { return "org.moagram.messenger.web"; }
         void startForegroundService(Intent i) {
             starts++; events.add("request");
@@ -168,6 +168,12 @@ public class NotificationServiceTest {
         static class drawable { static int notification=1; }
     }
     static class LaunchActivity {}
+    static class LocaleController {
+        static String getString(int id) {
+            check(init>0,"translated text is loaded only after application init");
+            return "translation-" + id;
+        }
+    }
     static class BroadcastReceiver { public void onReceive(Context context,Intent intent) {} }
     static class SharedConfig {
         static String passcodeHash=""; static boolean appLocked;
