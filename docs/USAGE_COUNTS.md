@@ -11,7 +11,7 @@ This counts installs that report activity in Moagram. It does not count people, 
 | Last 30 days | Different install IDs reporting within the last 30 × 24 hours. |
 | Installs so far | Install IDs that have checked in at least once. |
 
-An install reports activity on foreground entry, at most once per UTC day unless the app version changes. The report contains a random install ID, event type, and app version. It does not include a Telegram account, phone number, or messages. Several accounts in one installation count as one install. People can turn this off under **Settings → Moagram Updates → Count this install**. Reports are estimates of activity: offline opens, disabled reporting, and older builds may be missing.
+An install reports activity on foreground entry, at most once per UTC day unless the app version changes. The report contains a random install ID, event type, and app version. It does not include a Telegram account, phone number, or messages. Several accounts in one installation count as one install. Reporting is enabled by default, with no checkbox on the updates page. Previously saved opt-outs remain respected. Reports are estimates of activity: offline opens, disabled reporting, and older builds may be missing.
 
 The 30-day chart groups reports by UTC date, while the cards use rolling time windows. Today is marked incomplete. **Show daily counts** exposes exact values on mobile and to assistive technology. Version adoption shows each version's share of installs reporting in the last 30 days, using their latest reported version; inactive installs are excluded from the denominator.
 

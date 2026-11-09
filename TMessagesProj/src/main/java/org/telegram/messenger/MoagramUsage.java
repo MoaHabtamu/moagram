@@ -60,11 +60,6 @@ public final class MoagramUsage {
         return context != null && prefs(context).getBoolean("enabled", true);
     }
 
-    public static void setSharing(boolean enabled) {
-        Context context = ApplicationLoader.applicationContext;
-        if (context != null) prefs(context).edit().putBoolean("enabled", enabled).apply();
-    }
-
     public static void onForeground() {
         Context context = ApplicationLoader.applicationContext;
         if (context == null || !sharing() || !SENDING.compareAndSet(false, true)) return;
