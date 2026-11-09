@@ -4,6 +4,8 @@ import importlib.util
 import os
 from pathlib import Path
 import tempfile
+from urllib.error import HTTPError, URLError
+from io import BytesIO
 import unittest
 from unittest.mock import patch
 
@@ -188,7 +190,7 @@ class WorkflowTests(RepositoryCase):
         if method == "GET":
             return []
         if method == "POST" and endpoint == "pulls":
-            return {"html_url": "https://example.invalid/pr/1"}
+            return {"number": 1, "html_url": "https://example.invalid/pr/1"}
         raise AssertionError((method, endpoint, data))
 
     def test_main_publishes_a_candidate_without_changing_master(self):
@@ -202,7 +204,7 @@ class WorkflowTests(RepositoryCase):
         self.assertIn(f"candidate={candidate}", Path(self.output).read_text())
         creates = [c for c in api.call_args_list if c.args[:2] == ("POST", "pulls")]
         self.assertEqual(len(creates), 1)
-        self.assertTrue(creates[0].args[2]["draft"])
+        self.assertFalse(creates[0].args[2]["draft"])
 
     def test_main_reports_conflicts_without_pushing_or_opening_pr(self):
         # Both Moagram and Telegram edit the same base line.
@@ -269,6 +271,147 @@ class WorkflowTests(RepositoryCase):
             self.assertEqual(stopped.exception.code, 1)
         self.assertEqual(self.remote_head(sync.BRANCH), before)
         self.assertFalse(Path(self.output).exists())
+
+
+    def test_historical_merged_pr_does_not_pause_a_new_update(self):
+        sync.git("push", "origin", f"HEAD:refs/heads/{sync.BRANCH}")
+        manual = self.commit("repair.txt", "next update repair\n")
+        sync.git("push", "origin", f"HEAD:refs/heads/{sync.BRANCH}")
+        def api(method, endpoint, data=None):
+            if "state=closed" in endpoint:
+                return [{"number": 1, "merged_at": "2026-01-01T00:00:00Z"}]
+            return self.api(method, endpoint, data)
+        with patch.object(sync, "api", side_effect=api):
+            sync.main()
+        self.assertTrue(sync.ancestor(manual, self.remote_head(sync.BRANCH)))
+
+    def prepare_completion(self):
+        with patch.object(sync, "api", side_effect=self.api):
+            sync.main()
+        self.candidate = self.head()
+        self.pull = {
+            "number": 1, "state": "open", "draft": False,
+            "html_url": "https://example.invalid/pr/1",
+            "head": {"sha": self.candidate, "ref": sync.BRANCH, "repo": {"full_name": "test/repo"}},
+            "base": {"ref": sync.BASE, "repo": {"full_name": "test/repo"}},
+        }
+        os.environ.update(CANDIDATE=self.candidate, PULL_REQUEST="1")
+
+    def test_draft_pr_pauses_before_preparing_or_building(self):
+        def api(method, endpoint, data=None):
+            if "state=open" in endpoint and endpoint.startswith("pulls?"):
+                return [{"number": 1, "draft": True}]
+            return self.api(method, endpoint, data)
+        with patch.object(sync, "api", side_effect=api), self.assertRaises(SystemExit):
+            sync.main()
+        self.assertEqual(self.remote_head(), self.local)
+        self.assertFalse(Path(self.output).exists())
+
+    def test_repaired_new_base_can_be_retried_and_promoted(self):
+        self.prepare_completion()
+        sync.git("switch", "master")
+        later = self.commit("later.txt", "master changed during CI\n")
+        sync.git("push", "origin", "master")
+        with patch.object(sync, "api", side_effect=self.api):
+            sync.main()
+        self.candidate = self.head()
+        self.pull["head"]["sha"] = self.candidate
+        os.environ["CANDIDATE"] = self.candidate
+        with patch.object(sync, "api", return_value=self.pull):
+            sync.complete()
+        self.assertEqual(self.remote_head(), self.candidate)
+        self.assertTrue(sync.ancestor(later, self.candidate))
+
+    def test_completion_promotes_exact_commit_and_is_idempotent(self):
+        self.prepare_completion()
+        with patch.object(sync, "api", return_value=self.pull):
+            sync.complete()
+            sync.complete()
+        self.assertEqual(self.remote_head(), self.candidate)
+        self.assertTrue(sync.ancestor(self.target, self.remote_head()))
+
+    def test_completion_rejects_changed_master(self):
+        self.prepare_completion()
+        sync.git("switch", "master")
+        later = self.commit("later.txt", "concurrent master change\n")
+        sync.git("push", "origin", "master")
+        with patch.object(sync, "api", return_value=self.pull), self.assertRaises(SystemExit):
+            sync.complete()
+        self.assertEqual(self.remote_head(), later)
+
+    def test_completion_rejects_a_race_after_fetch(self):
+        self.prepare_completion()
+        sync.git("switch", "master")
+        later = self.commit("later.txt", "arrives during promotion\n")
+        real_git = sync.git
+        def race(*args, **kwargs):
+            if args[:2] == ("push", "origin"):
+                real_git("push", "origin", "master")
+            return real_git(*args, **kwargs)
+        with patch.object(sync, "api", return_value=self.pull), patch.object(sync, "git", side_effect=race):
+            with self.assertRaises(SystemExit):
+                sync.complete()
+        self.assertEqual(self.remote_head(), later)
+
+    def test_completion_rejects_changed_remote_update_branch(self):
+        self.prepare_completion()
+        later = self.commit("repair.txt", "untested repair\n")
+        sync.git("push", "origin", f"HEAD:refs/heads/{sync.BRANCH}")
+        with patch.object(sync, "api", return_value=self.pull), self.assertRaises(SystemExit):
+            sync.complete()
+        self.assertEqual(self.remote_head(), self.local)
+        self.assertEqual(self.remote_head(sync.BRANCH), later)
+
+    def test_completion_rejects_paused_or_retargeted_pr(self):
+        self.prepare_completion()
+        import copy
+        variants = []
+        for field, value in (("draft", True), ("state", "closed")):
+            pull = copy.deepcopy(self.pull)
+            pull[field] = value
+            variants.append(pull)
+        pull = copy.deepcopy(self.pull)
+        pull["head"]["sha"] = self.local
+        variants.append(pull)
+        pull = copy.deepcopy(self.pull)
+        pull["base"]["ref"] = "other"
+        variants.append(pull)
+        pull = copy.deepcopy(self.pull)
+        pull["head"]["repo"]["full_name"] = "attacker/repo"
+        variants.append(pull)
+        for pull in variants:
+            with self.subTest(pull=pull), patch.object(sync, "api", return_value=pull), self.assertRaises(SystemExit):
+                sync.complete()
+            self.assertEqual(self.remote_head(), self.local)
+
+
+class NetworkTests(unittest.TestCase):
+    @patch.dict(os.environ, {"GITHUB_REPOSITORY": "test/repo", "GITHUB_TOKEN": "test"})
+    def test_idempotent_requests_retry_transient_failures(self):
+        response = unittest.mock.MagicMock()
+        response.__enter__.return_value = BytesIO(b'{"ok": true}')
+        error = HTTPError("url", 503, "unavailable", {}, None)
+        with patch.object(sync, "urlopen", side_effect=[error, URLError("reset"), response]) as request, \
+                patch.object(sync.time, "sleep"):
+            self.assertEqual(sync.api("GET", "pulls"), {"ok": True})
+        self.assertEqual(request.call_count, 3)
+
+    @patch.dict(os.environ, {"GITHUB_REPOSITORY": "test/repo", "GITHUB_TOKEN": "test"})
+    def test_post_and_permanent_errors_are_not_blindly_retried(self):
+        for method, code in (("POST", 503), ("GET", 403), ("GET", 422)):
+            with self.subTest(method=method, code=code), \
+                    patch.object(sync, "urlopen", side_effect=HTTPError("url", code, "error", {}, None)) as request, \
+                    self.assertRaises(HTTPError):
+                sync.api(method, "pulls")
+            self.assertEqual(request.call_count, 1)
+
+    def test_fetch_retries_without_recursing_into_native_submodules(self):
+        failure = unittest.mock.Mock(returncode=1, stderr="network reset")
+        success = unittest.mock.Mock(returncode=0)
+        with patch.object(sync, "git", side_effect=[failure, success]) as git, patch.object(sync.time, "sleep"):
+            self.assertIs(sync.fetch("origin", "master"), success)
+        self.assertEqual(git.call_count, 2)
+        self.assertIn("fetch.recurseSubmodules=false", git.call_args.args)
 
 
 if __name__ == "__main__":
