@@ -369,25 +369,26 @@ public class ApplicationLoader extends Application {
     });
 
     public static void startPushService() {
-        SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
-        boolean enabled;
-        if (preferences.contains("pushService")) {
-            enabled = preferences.getBoolean("pushService", true);
-        } else {
-            enabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", true);
-        }
-        NotificationsService.onPushServiceTick(enabled, mainInterfacePaused);
-        if (enabled) {
+        if (NotificationsService.isKeepAliveEnabled()) {
             try {
-                applicationContext.startService(new Intent(applicationContext, NotificationsService.class));
-            } catch (Throwable ignore) {
-
+                Intent intent = new Intent(applicationContext, NotificationsService.class);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    applicationContext.startForegroundService(intent);
+                } else {
+                    applicationContext.startService(intent);
+                }
+            } catch (RuntimeException e) {
+                FileLog.e(e);
+                // Inexact alarms are not an exemption from Android 12+ FGS start
+                // restrictions. Do bounded network work until a permitted start.
+                NotificationsService.onPushServiceTick(true, true);
             }
         } else {
+            NotificationsService.onPushServiceTick(false, false);
             try {
                 applicationContext.stopService(new Intent(applicationContext, NotificationsService.class));
-            } catch (Throwable ignore) {
-
+            } catch (RuntimeException e) {
+                FileLog.e(e);
             }
         }
     }

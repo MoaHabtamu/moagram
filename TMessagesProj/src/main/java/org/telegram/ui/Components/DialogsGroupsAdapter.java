@@ -17,7 +17,6 @@ import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.R;
-import org.telegram.messenger.SharedConfig;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
@@ -57,9 +56,6 @@ public class DialogsGroupsAdapter extends UniversalAdapter {
 
     public void updateMyGroups() {
         myGroups.clear();
-        if (SharedConfig.searchHideJoined) {
-            return;
-        }
         ArrayList<TLRPC.Chat> groups = new ArrayList<>();
         ArrayList<TLRPC.Dialog> dialogs = MessagesController.getInstance(currentAccount).getAllDialogs();
         for (TLRPC.Dialog d : dialogs) {
@@ -74,7 +70,7 @@ public class DialogsGroupsAdapter extends UniversalAdapter {
 
     public void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         if (TextUtils.isEmpty(query)) {
-            if (!SharedConfig.searchHideJoined && myGroups != null && !myGroups.isEmpty()) {
+            if (myGroups != null && !myGroups.isEmpty()) {
                 if (myGroups.size() > 5) {
                     items.add(UItem.asGraySection(getString(R.string.SearchMyGroups), getString(expandedMyGroups ? R.string.ShowLess : R.string.ShowMore), this::toggleExpandedMyGroups));
                 } else {
@@ -94,7 +90,7 @@ public class DialogsGroupsAdapter extends UniversalAdapter {
                 items.add(UItem.asFlicker(FlickerLoadingView.PROFILE_SEARCH_CELL));
             }
         } else {
-            if (!SharedConfig.searchHideJoined && !searchMyGroups.isEmpty()) {
+            if (!searchMyGroups.isEmpty()) {
                 items.add(UItem.asGraySection(getString(R.string.SearchMyGroups)));
                 for (TLRPC.Chat chat : searchMyGroups) {
                     items.add(UItem.asProfileCell(chat).withUsername(true));
@@ -103,10 +99,6 @@ public class DialogsGroupsAdapter extends UniversalAdapter {
             ArrayList<TLRPC.Chat> visibleGroups = new ArrayList<>();
             for (TLRPC.Chat chat : searchGroups) {
                 if (chat == null) continue;
-                TLRPC.Chat localChat = MessagesController.getInstance(currentAccount).getChat(chat.id);
-                if (SharedConfig.searchHideJoined && (!ChatObject.isNotInChat(chat) || (localChat != null && !ChatObject.isNotInChat(localChat)))) {
-                    continue;
-                }
                 visibleGroups.add(chat);
             }
             if (!visibleGroups.isEmpty()) {
@@ -223,12 +215,6 @@ public class DialogsGroupsAdapter extends UniversalAdapter {
                             if (chat != null && !isGroup(chat)) {
                                 continue;
                             }
-                            if (SharedConfig.searchHideJoined && chat != null && !ChatObject.isNotInChat(chat)) {
-                                continue;
-                            }
-                        }
-                        if (SharedConfig.searchHideJoined && MessagesController.getInstance(currentAccount).dialogs_dict.get(did) != null) {
-                            continue;
                         }
                         MessageObject messageObject = new MessageObject(currentAccount, message, false, true);
                         messageObject.setQuery(query);
@@ -238,10 +224,6 @@ public class DialogsGroupsAdapter extends UniversalAdapter {
                     if (response.chats != null) {
                         for (TLRPC.Chat chat : response.chats) {
                             if (chat == null || !isGroup(chat)) continue;
-                            TLRPC.Chat localChat = MessagesController.getInstance(currentAccount).getChat(chat.id);
-                            if (SharedConfig.searchHideJoined && (!ChatObject.isNotInChat(chat) || (localChat != null && !ChatObject.isNotInChat(localChat)))) {
-                                continue;
-                            }
                             boolean exists = false;
                             for (int c = 0; c < searchGroups.size(); ++c) {
                                 if (searchGroups.get(c).id == chat.id) {
@@ -285,25 +267,23 @@ public class DialogsGroupsAdapter extends UniversalAdapter {
                 String q = this.query.toLowerCase(), qT = AndroidUtilities.translitSafe(q);
 
                 searchMyGroups.clear();
-                if (!SharedConfig.searchHideJoined) {
-                    if (response != null) {
-                        for (TLRPC.Peer peer : response.my_results) {
-                            long chatId = peer.channel_id != 0 ? peer.channel_id : peer.chat_id;
-                            if (chatId == 0) continue;
-                            TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(chatId);
-                            if (chat == null || !isGroup(chat)) continue;
-                            if (chatIds.contains(chat.id)) continue;
-                            chatIds.add(chat.id);
-                            searchMyGroups.add(chat);
-                        }
+                if (response != null) {
+                    for (TLRPC.Peer peer : response.my_results) {
+                        long chatId = peer.channel_id != 0 ? peer.channel_id : peer.chat_id;
+                        if (chatId == 0) continue;
+                        TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(chatId);
+                        if (chat == null || !isGroup(chat)) continue;
+                        if (chatIds.contains(chat.id)) continue;
+                        chatIds.add(chat.id);
+                        searchMyGroups.add(chat);
                     }
-                    for (TLRPC.Chat chat : myGroups) {
-                        if (chat == null || chatIds.contains(chat.id)) continue;
-                        String t = chat.title.toLowerCase(), tT = AndroidUtilities.translitSafe(t);
-                        if (t.contains(q) || tT.contains(qT)) {
-                            chatIds.add(chat.id);
-                            searchMyGroups.add(chat);
-                        }
+                }
+                for (TLRPC.Chat chat : myGroups) {
+                    if (chat == null || chatIds.contains(chat.id)) continue;
+                    String t = chat.title.toLowerCase(), tT = AndroidUtilities.translitSafe(t);
+                    if (t.contains(q) || tT.contains(qT)) {
+                        chatIds.add(chat.id);
+                        searchMyGroups.add(chat);
                     }
                 }
 
@@ -313,10 +293,6 @@ public class DialogsGroupsAdapter extends UniversalAdapter {
                         if (chatId == 0) continue;
                         TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(chatId);
                         if (chat == null || !isGroup(chat)) continue;
-                        TLRPC.Chat localChat = MessagesController.getInstance(currentAccount).getChat(chat.id);
-                        if (SharedConfig.searchHideJoined && (!ChatObject.isNotInChat(chat) || (localChat != null && !ChatObject.isNotInChat(localChat)))) {
-                            continue;
-                        }
                         boolean exists = false;
                         for (int c = 0; c < searchGroups.size(); ++c) {
                             if (searchGroups.get(c).id == chat.id) {

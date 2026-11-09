@@ -45,6 +45,8 @@ The runner also executes 36 in-app update policy/signature checks and nine relea
 
 Contact sorting checks execute the production comparator and contact-screen status/resume handlers against mixed online, offline, private, approximate, bot, and missing-user states. They compare ordering with the actual contact-row Online condition, exercise live status changes and privacy-hint expiry, and preserve alphabetical mode. Run them independently with `python3 Tools/tests/test-contact-sorting.py`.
 
+Notification-service checks execute the production service, startup method, boot receiver, keep-alive job, and account preference lookup with recording Android doubles. Run `python3 Tools/tests/test-notification-service.py` for foreground promotion, silent notification setup, sticky restart, task removal, disabling, blocked starts, enqueue-failure recovery, and per-account connection settings across API levels 23–36. The main runner includes these checks. On Android 14+, the persistent incoming-message connection uses `specialUse` with a declared subtype; `dataSync` is used only on API 29–33. Device delivery with real accounts still needs verification.
+
 For a quick compose-only check with Python 3 and a JDK, without Android SDK setup:
 
 ```bash

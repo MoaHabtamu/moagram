@@ -223,7 +223,7 @@ public class SearchAdapterHelper {
                                         chat = chatsMap.get(peer.channel_id);
                                     }
                                     if (chat != null) {
-                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || !allowGlobalResults && ChatObject.isNotInChat(chat) || (org.telegram.messenger.SharedConfig.searchHideJoined && !ChatObject.isNotInChat(chat)) || !filter(chat)) {
+                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || !allowGlobalResults && ChatObject.isNotInChat(chat) || !filter(chat)) {
                                             continue;
                                         }
                                         globalSearch.add(chat);
@@ -250,7 +250,7 @@ public class SearchAdapterHelper {
                                         chat = chatsMap.get(peer.channel_id);
                                     }
                                     if (chat != null) {
-                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || -chat.id == exceptDialogId || (org.telegram.messenger.SharedConfig.searchHideJoined && !ChatObject.isNotInChat(chat)) || !filter(chat)) {
+                                        if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || -chat.id == exceptDialogId || !filter(chat)) {
                                             continue;
                                         }
                                         localServerSearch.add(chat);

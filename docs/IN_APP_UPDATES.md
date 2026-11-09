@@ -53,7 +53,7 @@ The app still requires user approval to download and install a critical update. 
 
 ## Fork release revisions
 
-Standalone Android version codes use `Telegram APP_VERSION_CODE * 100 + MOAGRAM_VERSION_REVISION * 10 + ABI digit`. The universal ABI digit is `9`; revision `1` produces code `723719` for Telegram base code `7237`, and version name `13.1.1-Moagram.2`. Revision is zero-based (`0..9`); increment it for another Moagram release on the same Telegram base, or reset it when the upstream base code increases. Do not lower a published Android version code. This keeps Telegram’s version properties available for independent upstream merges.
+Starting with preview 11, standalone Android version codes use `Telegram APP_VERSION_CODE * 1000 + MOAGRAM_VERSION_REVISION * 10 + ABI digit`. The universal ABI digit is `9`; revision `10` produces code `7237109` for Telegram base code `7237`, and version name `13.1.1-Moagram.11`. Revision is zero-based (`0..99`); increment it for another Moagram release on the same Telegram base, or reset it when the upstream base code increases. Previews 1–10 used a multiplier of `100`; the expanded range keeps preview 11 newer than those releases and reserves room for future previews. Do not lower a published Android version code. This keeps Telegram’s version properties available for independent upstream merges.
 
 ## Verification
 

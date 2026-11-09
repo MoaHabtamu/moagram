@@ -36,6 +36,6 @@ The client also includes controls for saving restricted content and retaining se
 
 ## Interface and account behavior
 
-Moagram has its own icon, app name, and package, plus additional chat/search controls. Many Telegram features remain inherited from upstream. Custom settings differ in scope: Ghost Mode and hidden-chat rules are account-specific, while some retention switches are shared app settings. Review settings after switching accounts.
+Moagram has its own icon, app name, and package, plus additional chat controls. Many Telegram features remain inherited from upstream. Custom settings differ in scope: Ghost Mode and hidden-chat rules are account-specific, while some retention switches are shared app settings. Review settings after switching accounts.
 
 These features are part of an early preview. See [development checks](DEVELOPMENT.md) for the scope of automated tests and remaining device coverage.

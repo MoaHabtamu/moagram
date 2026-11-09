@@ -22,6 +22,8 @@ On macOS, use `shasum -a 256 <downloaded-apk>`. On Windows PowerShell, use `Get-
 
 The standalone package is `org.moagram.messenger.web`, so it can coexist with the official Telegram app. Android permissions and notification delivery depend on your device settings. Check notification and battery settings if messages do not appear promptly.
 
+For background delivery, enable **Settings → Notifications and Sounds → Keep-Alive Service** and **Background Connection**. Keep-Alive Service uses a silent ongoing notification to keep the connection running while Moagram is closed. Allow notifications in Android settings to see message alerts. If your device restricts background activity, allow Moagram to run in the background in its battery settings. After using Android’s **Force stop**, open Moagram again; a force-stopped app cannot restart itself.
+
 ## Update an existing installation
 
 Install a newer APK over the existing app. Android requires a compatible version code and the same signing key. A build you sign yourself generally cannot update a build signed by this project's maintainer.

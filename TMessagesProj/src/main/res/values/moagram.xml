@@ -39,12 +39,6 @@
     <string name="SaveSelfDestructingMediaInfo">Prevent self-destructing and view-once photos, videos, and voice messages from expiring or being deleted after viewing.</string>
     <string name="BypassChannelRestrictions">Bypass Channel Restrictions</string>
     <string name="BypassChannelRestrictionsInfo">Ignore copyright and store restriction warnings to view blocked channels and messages.</string>
-    <string name="SearchShowPrivateChats">Hide Joined Channels &amp; Groups</string>
-    <string name="SearchShowPrivateChatsSubtitle">Exclude joined channels, groups, and their posts/messages from search results</string>
-    <string name="SearchHideJoined">Hide Joined Channels &amp; Groups</string>
-    <string name="SearchHideJoinedSubtitle">Exclude joined channels, groups, and their posts/messages from search results</string>
-    <string name="SearchHideJoinedBulletinOn">Joined channels, groups &amp; posts hidden from search</string>
-    <string name="SearchHideJoinedBulletinOff">Joined channels, groups &amp; posts shown in search</string>
     <string name="SearchMyGroups">My Groups</string>
     <string name="SearchGlobalGroups">Global Groups</string>
     <string name="NoGroupsFound">No groups found</string>
@@ -112,4 +106,5 @@
     <string name="MoagramUpdateNeedsAttention">Update needs attention</string>
     <string name="MoagramUsageCount">Count this install</string>
     <string name="MoagramUsageCountInfo">Sends a random install id and the app version so new installs can be counted separately from updates, along with how many installs report activity. Reports do not include your Telegram account, phone number, or messages.</string>
+    <string name="MoagramBackgroundConnectionActive">Background connection active for incoming messages</string>
 </resources>

@@ -131,10 +131,10 @@ android {
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             outputFileName = "app.apk"
-            // Reserve a fork revision digit without editing Telegram's version properties.
+            // Reserve two fork revision digits without editing Telegram's version properties.
             def moagramRevision = Integer.parseInt(MOAGRAM_VERSION_REVISION)
-            if (moagramRevision < 0 || moagramRevision > 9) throw new GradleException('Moagram revision must be 0..9')
-            output.versionCodeOverride = defaultConfig.versionCode * 100 + moagramRevision * 10 + variant.productFlavors.get(0).abiVersionCode
+            if (moagramRevision < 0 || moagramRevision > 99) throw new GradleException('Moagram revision must be 0..99')
+            output.versionCodeOverride = defaultConfig.versionCode * 1000 + moagramRevision * 10 + variant.productFlavors.get(0).abiVersionCode
         }
     }
 

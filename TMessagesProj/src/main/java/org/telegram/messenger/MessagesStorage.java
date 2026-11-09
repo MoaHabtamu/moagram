@@ -18555,9 +18555,6 @@ public class MessagesStorage extends BaseController {
                             if (data != null) {
                                 TLRPC.Chat chat = TLRPC.Chat.TLdeserialize(data, data.readInt32(false), false);
                                 data.reuse();
-                                if (org.telegram.messenger.SharedConfig.searchHideJoined && !ChatObject.isNotInChat(chat)) {
-                                    continue;
-                                }
                                 if (dialogsType == DialogsActivity.DIALOGS_TYPE_BOT_REQUEST_PEER && (onlyDialogIds == null || !onlyDialogIds.contains(-chat.id))) {
                                     continue;
                                 }

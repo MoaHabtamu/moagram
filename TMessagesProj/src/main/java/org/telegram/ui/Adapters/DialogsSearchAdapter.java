@@ -321,23 +321,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 dialogId = ((TLRPC.User) obj).id;
             } else if (obj instanceof TLRPC.Chat) {
                 dialogId = -((TLRPC.Chat) obj).id;
-                TLRPC.Chat chat = (TLRPC.Chat) obj;
-                if (org.telegram.messenger.SharedConfig.searchHideJoined && !ChatObject.isNotInChat(chat)) {
-                    return false;
-                }
             } else if (obj instanceof TLRPC.EncryptedChat) {
                 dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) obj).id);
             } else if (obj instanceof TLRPC.Dialog) {
                 dialogId = ((TLRPC.Dialog) obj).id;
-                if (org.telegram.messenger.SharedConfig.searchHideJoined && dialogId < 0) {
-                    TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-dialogId);
-                    if (chat != null && !ChatObject.isNotInChat(chat)) {
-                        return false;
-                    }
-                    if (MessagesController.getInstance(currentAccount).dialogs_dict.get(dialogId) != null) {
-                        return false;
-                    }
-                }
             }
             if (dialogId != 0) {
                 boolean isHidden = HiddenChatsController.getInstance(currentAccount).isChatHidden(dialogId);
@@ -684,7 +671,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                         if (res.chats != null) {
                             for (TLRPC.Chat chat : res.chats) {
                                 if (chat == null) continue;
-                                if (org.telegram.messenger.SharedConfig.searchHideJoined && !ChatObject.isNotInChat(chat)) continue;
                                 if (searchAdapterHelper.getGlobalSearchMap().get(-chat.id) == null) {
                                     searchAdapterHelper.getGlobalSearch().add(chat);
                                     searchAdapterHelper.getGlobalSearchMap().put(-chat.id, chat);
@@ -706,17 +692,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                             boolean vaultMode = dialogsActivity != null && dialogsActivity.isHiddenChats();
                             if (vaultMode ? !isHidden : isHidden) {
                                 continue;
-                            }
-                            if (org.telegram.messenger.SharedConfig.searchHideJoined) {
-                                if (did < 0) {
-                                    TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-did);
-                                    if (chat != null && !ChatObject.isNotInChat(chat)) {
-                                        continue;
-                                    }
-                                }
-                                if (MessagesController.getInstance(currentAccount).dialogs_dict.get(did) != null) {
-                                    continue;
-                                }
                             }
                             MessageObject msg = messageObjects.get(a);
                             if (!searchForumResultMessages.isEmpty()) {
@@ -1401,18 +1376,6 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                             MessagesController.getInstance(currentAccount).putChats(msgs.chats, false);
                             for (int i = 0; i < msgs.messages.size(); ++i) {
                                 TLRPC.Message msg = msgs.messages.get(i);
-                                long did = MessageObject.getDialogId(msg);
-                                if (org.telegram.messenger.SharedConfig.searchHideJoined) {
-                                    if (did < 0) {
-                                        TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-did);
-                                        if (chat != null && !ChatObject.isNotInChat(chat)) {
-                                            continue;
-                                        }
-                                    }
-                                    if (MessagesController.getInstance(currentAccount).dialogs_dict.get(did) != null) {
-                                        continue;
-                                    }
-                                }
                                 publicPosts.add(new MessageObject(currentAccount, msg, false, true));
                             }
                             if (delegate != null) {

@@ -44,6 +44,7 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.NotificationsController;
+import org.telegram.messenger.NotificationsService;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
@@ -727,13 +728,14 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
                 getNotificationsController().updateBadge();
             } else if (position == notificationsServiceConnectionRow) {
                 SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
-                enabled = preferences.getBoolean("pushConnection", getMessagesController().backgroundConnection);
+                enabled = getConnectionsManager().isPushConnectionEnabled();
                 SharedPreferences.Editor editor = preferences.edit();
                 editor.putBoolean("pushConnection", !enabled);
                 editor.commit();
                 for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
                     ConnectionsManager.getInstance(a).setPushConnectionEnabled(!enabled);
                 }
+                ApplicationLoader.startPushService();
             } else if (position == accountsAllRow) {
                 SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
                 enabled = preferences.getBoolean("AllAccounts", true);
@@ -754,7 +756,7 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
                 }
             } else if (position == notificationsServiceRow) {
                 SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
-                enabled = preferences.getBoolean("pushService", getMessagesController().keepAliveService);
+                enabled = NotificationsService.isKeepAliveEnabled();
                 SharedPreferences.Editor editor = preferences.edit();
                 editor.putBoolean("pushService", !enabled);
                 editor.commit();
@@ -1016,11 +1018,9 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
                     } else if (position == androidAutoAlertRow) {
                         checkCell.setTextAndCheck("Android Auto", preferences.getBoolean("EnableAutoNotifications", false), true);
                     } else if (position == notificationsServiceRow) {
-                        SharedPreferences globalPrefs = MessagesController.getGlobalNotificationsSettings();
-                        checkCell.setTextAndValueAndCheck(getString("NotificationsService", R.string.NotificationsService), getString("NotificationsServiceInfo", R.string.NotificationsServiceInfo), globalPrefs.getBoolean("pushService", getMessagesController().keepAliveService), true, true);
+                        checkCell.setTextAndValueAndCheck(getString("NotificationsService", R.string.NotificationsService), getString("NotificationsServiceInfo", R.string.NotificationsServiceInfo), NotificationsService.isKeepAliveEnabled(), true, true);
                     } else if (position == notificationsServiceConnectionRow) {
-                        SharedPreferences globalPrefs = MessagesController.getGlobalNotificationsSettings();
-                        checkCell.setTextAndValueAndCheck(getString("NotificationsServiceConnection", R.string.NotificationsServiceConnection), getString("NotificationsServiceConnectionInfo", R.string.NotificationsServiceConnectionInfo), globalPrefs.getBoolean("pushConnection", getMessagesController().backgroundConnection), true, true);
+                        checkCell.setTextAndValueAndCheck(getString("NotificationsServiceConnection", R.string.NotificationsServiceConnection), getString("NotificationsServiceConnectionInfo", R.string.NotificationsServiceConnectionInfo), getConnectionsManager().isPushConnectionEnabled(), true, true);
                     } else if (position == badgeNumberShowRow) {
                         checkCell.setTextAndCheck(getString("BadgeNumberShow", R.string.BadgeNumberShow), getNotificationsController().showBadgeNumber, true);
                     } else if (position == badgeNumberMutedRow) {

@@ -5,10 +5,8 @@ import android.text.TextUtils;
 import android.view.View;
 
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
-import org.telegram.messenger.SharedConfig;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
@@ -132,18 +130,6 @@ public class HashtagsSearchAdapter extends UniversalAdapter {
                     MessagesController.getInstance(currentAccount).putChats(msgs.chats, false);
                     for (int i = 0; i < msgs.messages.size(); ++i) {
                         final TLRPC.Message msg = msgs.messages.get(i);
-                        long did = MessageObject.getDialogId(msg);
-                        if (SharedConfig.searchHideJoined) {
-                            if (did < 0) {
-                                TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-did);
-                                if (chat != null && !ChatObject.isNotInChat(chat)) {
-                                    continue;
-                                }
-                            }
-                            if (MessagesController.getInstance(currentAccount).dialogs_dict.get(did) != null) {
-                                continue;
-                            }
-                        }
                         final MessageObject messageObject = new MessageObject(currentAccount, msg, false, true);
                         messageObject.setQuery(finalQuery);
                         messages.add(messageObject);

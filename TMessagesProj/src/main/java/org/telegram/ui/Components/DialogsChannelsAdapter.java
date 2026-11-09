@@ -20,7 +20,6 @@ import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.R;
-import org.telegram.messenger.SharedConfig;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
@@ -63,9 +62,6 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
 
     public void updateMyChannels() {
         myChannels.clear();
-        if (SharedConfig.searchHideJoined) {
-            return;
-        }
         ArrayList<TLRPC.Chat> channels = new ArrayList<>();
         ArrayList<TLRPC.Dialog> dialogs = MessagesController.getInstance(currentAccount).getAllDialogs();
         for (TLRPC.Dialog d : dialogs) {
@@ -80,7 +76,7 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
 
     public void fillItems(ArrayList<UItem> items, UniversalAdapter adapter) {
         if (TextUtils.isEmpty(query)) {
-            if (!SharedConfig.searchHideJoined && myChannels != null && !myChannels.isEmpty()) {
+            if (myChannels != null && !myChannels.isEmpty()) {
                 if (myChannels.size() > 5) {
                     items.add(UItem.asGraySection(getString(R.string.SearchMyChannels), getString(expandedMyChannels ? R.string.ShowLess : R.string.ShowMore), this::toggleExpandedMyChannels));
                 } else {
@@ -120,29 +116,19 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
         } else {
             ArrayList<TLRPC.Chat> foundChannels = new ArrayList<>();
             HashSet<Long> seenIds = new HashSet<>();
-            if (!SharedConfig.searchHideJoined) {
-                for (TLRPC.Chat chat : searchMyChannels) {
-                    if (chat != null && !seenIds.contains(chat.id)) {
-                        seenIds.add(chat.id);
-                        foundChannels.add(chat);
-                    }
+            for (TLRPC.Chat chat : searchMyChannels) {
+                if (chat != null && !seenIds.contains(chat.id)) {
+                    seenIds.add(chat.id);
+                    foundChannels.add(chat);
                 }
             }
             for (TLRPC.Chat chat : searchRecommendedChannels) {
                 if (chat == null || seenIds.contains(chat.id)) continue;
-                TLRPC.Chat localChat = MessagesController.getInstance(currentAccount).getChat(chat.id);
-                if (SharedConfig.searchHideJoined && (!ChatObject.isNotInChat(chat) || (localChat != null && !ChatObject.isNotInChat(localChat)))) {
-                    continue;
-                }
                 seenIds.add(chat.id);
                 foundChannels.add(chat);
             }
             for (TLRPC.Chat chat : searchChannels) {
                 if (chat == null || seenIds.contains(chat.id)) continue;
-                TLRPC.Chat localChat = MessagesController.getInstance(currentAccount).getChat(chat.id);
-                if (SharedConfig.searchHideJoined && (!ChatObject.isNotInChat(chat) || (localChat != null && !ChatObject.isNotInChat(localChat)))) {
-                    continue;
-                }
                 seenIds.add(chat.id);
                 foundChannels.add(chat);
             }
@@ -252,18 +238,6 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
                     MessagesController.getInstance(currentAccount).putChats(response.chats, false);
 
                     for (TLRPC.Message message : response.messages) {
-                        long did = MessageObject.getDialogId(message);
-                        if (SharedConfig.searchHideJoined) {
-                            if (did < 0) {
-                                TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-did);
-                                if (chat != null && !ChatObject.isNotInChat(chat)) {
-                                    continue;
-                                }
-                            }
-                            if (MessagesController.getInstance(currentAccount).dialogs_dict.get(did) != null) {
-                                continue;
-                            }
-                        }
                         MessageObject messageObject = new MessageObject(currentAccount, message, false, true);
                         messageObject.setQuery(query);
                         messages.add(messageObject);
@@ -272,10 +246,6 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
                     if (response.chats != null) {
                         for (TLRPC.Chat chat : response.chats) {
                             if (chat == null || !ChatObject.isChannelAndNotMegaGroup(chat)) continue;
-                            TLRPC.Chat localChat = MessagesController.getInstance(currentAccount).getChat(chat.id);
-                            if (SharedConfig.searchHideJoined && (!ChatObject.isNotInChat(chat) || (localChat != null && !ChatObject.isNotInChat(localChat)))) {
-                                continue;
-                            }
                             boolean exists = false;
                             for (int c = 0; c < searchChannels.size(); ++c) {
                                 if (searchChannels.get(c).id == chat.id) {
@@ -319,27 +289,25 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
                 String q = this.query.toLowerCase(), qT = AndroidUtilities.translitSafe(q);
 
                 searchMyChannels.clear();
-                if (!SharedConfig.searchHideJoined) {
-                    if (response != null) {
-                        for (TLRPC.Peer peer : response.my_results) {
-                            if (!(peer instanceof TLRPC.TL_peerChannel)) continue;
-                            TLRPC.Chat channel = MessagesController.getInstance(currentAccount).getChat(peer.channel_id);
-                            if (channel == null) continue;
-                            if (!ChatObject.isChannelAndNotMegaGroup(channel))
-                                continue;
-                            if (chatIds.contains(channel.id))
-                                continue;
-                            chatIds.add(channel.id);
-                            searchMyChannels.add(channel);
-                        }
+                if (response != null) {
+                    for (TLRPC.Peer peer : response.my_results) {
+                        if (!(peer instanceof TLRPC.TL_peerChannel)) continue;
+                        TLRPC.Chat channel = MessagesController.getInstance(currentAccount).getChat(peer.channel_id);
+                        if (channel == null) continue;
+                        if (!ChatObject.isChannelAndNotMegaGroup(channel))
+                            continue;
+                        if (chatIds.contains(channel.id))
+                            continue;
+                        chatIds.add(channel.id);
+                        searchMyChannels.add(channel);
                     }
-                    for (TLRPC.Chat channel : myChannels) {
-                        if (channel == null || chatIds.contains(channel.id)) continue;
-                        String t = channel.title.toLowerCase(), tT = AndroidUtilities.translitSafe(t);
-                        if (t.contains(q) || tT.contains(qT)) {
-                            chatIds.add(channel.id);
-                            searchMyChannels.add(channel);
-                        }
+                }
+                for (TLRPC.Chat channel : myChannels) {
+                    if (channel == null || chatIds.contains(channel.id)) continue;
+                    String t = channel.title.toLowerCase(), tT = AndroidUtilities.translitSafe(t);
+                    if (t.contains(q) || tT.contains(qT)) {
+                        chatIds.add(channel.id);
+                        searchMyChannels.add(channel);
                     }
                 }
 
@@ -350,9 +318,6 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
                         if (obj instanceof TLRPC.Chat) {
                             final TLRPC.Chat chat = (TLRPC.Chat) obj;
                             if (!ChatObject.isChannelAndNotMegaGroup(chat))
-                                continue;
-                            TLRPC.Chat localChat = MessagesController.getInstance(currentAccount).getChat(chat.id);
-                            if (SharedConfig.searchHideJoined && (!ChatObject.isNotInChat(chat) || (localChat != null && !ChatObject.isNotInChat(localChat))))
                                 continue;
                             String t = chat.title.toLowerCase(), tT = AndroidUtilities.translitSafe(t);
                             if (
@@ -374,9 +339,6 @@ public class DialogsChannelsAdapter extends UniversalAdapter {
                         TLRPC.Chat channel = MessagesController.getInstance(currentAccount).getChat(peer.channel_id);
                         if (channel == null) continue;
                         if (!ChatObject.isChannelAndNotMegaGroup(channel))
-                            continue;
-                        TLRPC.Chat localChat = MessagesController.getInstance(currentAccount).getChat(channel.id);
-                        if (SharedConfig.searchHideJoined && (!ChatObject.isNotInChat(channel) || (localChat != null && !ChatObject.isNotInChat(localChat))))
                             continue;
                         boolean exists = false;
                         for (int c = 0; c < searchChannels.size(); ++c) {

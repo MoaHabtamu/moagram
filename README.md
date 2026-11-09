@@ -25,7 +25,7 @@ The development source is based on Telegram **13.1.1** and requires **Android 6.
 | **Ghost Mode** | Configure online-presence, typing, read-receipt, and story-view behavior per account. |
 | **Hidden chats** | Hide selected chats from the normal list, choose opening shortcuts, and configure a passcode and notifications. |
 | **Local history controls** | Optional retention of received deleted messages, cached media, message revisions, and story-viewer lists. |
-| **Custom interface** | Moagram branding and additional chat/search controls. |
+| **Custom interface** | Moagram branding and additional chat controls. |
 
 Read the [feature guide](docs/FEATURES.md) for behavior and limits. Client-side privacy controls are not a guarantee of anonymity; Telegram servers and other clients can still observe account activity.
 

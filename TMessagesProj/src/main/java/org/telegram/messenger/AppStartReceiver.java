@@ -28,8 +28,8 @@ public class AppStartReceiver extends BroadcastReceiver {
                     SharedConfig.appLocked = true;
                     SharedConfig.saveConfig();
                 }
-                ApplicationLoader.postInitApplication();
                 ApplicationLoader.startPushService();
+                ApplicationLoader.postInitApplication();
                 LocalRepeatRefill.schedule();
             });
         }

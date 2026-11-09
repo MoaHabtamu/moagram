@@ -48,7 +48,6 @@ import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
-import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.browser.Browser;
@@ -703,18 +702,6 @@ public class FilteredSearchView extends FrameLayout implements NotificationCente
                     int n = res.messages.size();
                     for (int i = 0; i < n; i++) {
                         TLRPC.Message message = res.messages.get(i);
-                        long did = MessageObject.getDialogId(message);
-                        if (SharedConfig.searchHideJoined) {
-                            if (did < 0) {
-                                TLRPC.Chat chat = MessagesController.getInstance(currentAccount).getChat(-did);
-                                if (chat != null && !ChatObject.isNotInChat(chat)) {
-                                    continue;
-                                }
-                            }
-                            if (MessagesController.getInstance(currentAccount).dialogs_dict.get(did) != null) {
-                                continue;
-                            }
-                        }
                         MessageObject messageObject = new MessageObject(currentAccount, message, false, true);
                         messageObject.setQuery(finalQuery);
                         messageObjects.add(messageObject);

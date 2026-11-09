@@ -9,39 +9,42 @@
 package org.telegram.messenger;
 
 import android.app.AlarmManager;
+import android.app.Notification;
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.SystemClock;
 
+import androidx.core.app.NotificationCompat;
+
 import org.telegram.tgnet.ConnectionsManager;
+import org.telegram.ui.LaunchActivity;
 
 public class NotificationsService extends Service {
 
-    private static final String LEGACY_CHANNEL_ID = "moagram_keep_alive_service";
-    private static final int LEGACY_NOTIFICATION_ID = 723699;
+    private static final String CHANNEL_ID = "moagram_keep_alive_service";
+    private static final int NOTIFICATION_ID = 723699;
     private static final int ALARM_REQUEST_CODE = 723699;
     private static final long HEARTBEAT_INTERVAL_MS = 3 * 60 * 1000L;
 
-    private static final Runnable heartbeatRunnable = new Runnable() {
+    private boolean foregroundStarted;
+
+    private final Runnable heartbeatRunnable = new Runnable() {
         @Override
         public void run() {
-            Context context = ApplicationLoader.applicationContext;
             if (!isKeepAliveEnabled()) {
-                if (context != null) {
-                    cancelWakeupAlarm(context);
-                }
+                cancelWakeupAlarm(NotificationsService.this);
+                stopSelf();
                 return;
             }
             ensurePushConnectionsAlive(false);
-            if (context != null) {
-                scheduleWakeupAlarm(context, HEARTBEAT_INTERVAL_MS);
-            }
             AndroidUtilities.runOnUIThread(this, HEARTBEAT_INTERVAL_MS);
         }
     };
@@ -49,16 +52,30 @@ public class NotificationsService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        clearLegacyForegroundNotification(this);
-        ApplicationLoader.postInitApplication();
-        onPushServiceTick(isKeepAliveEnabled(), false);
+        // Promote before account/database initialization, which can exceed the
+        // startForegroundService deadline on a cold start.
+        foregroundStarted = startForegroundCompat();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        clearLegacyForegroundNotification(this);
+        if (!isKeepAliveEnabled()) {
+            cancelWakeupAlarm(this);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         ApplicationLoader.postInitApplication();
-        onPushServiceTick(isKeepAliveEnabled(), false);
+        if (!foregroundStarted) {
+            onPushServiceTick(true, true);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+        // Android owns restarting this sticky foreground service. Only use an
+        // alarm when there is no service to protect the process.
+        cancelWakeupAlarm(this);
+        ensurePushConnectionsAlive(false);
+        AndroidUtilities.cancelRunOnUIThread(heartbeatRunnable);
+        AndroidUtilities.runOnUIThread(heartbeatRunnable, HEARTBEAT_INTERVAL_MS);
         return START_STICKY;
     }
 
@@ -71,18 +88,27 @@ public class NotificationsService extends Service {
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
         if (isKeepAliveEnabled()) {
-            scheduleWakeupAlarm(this, 5000L);
-            sendStartBroadcast(this);
+            scheduleWakeupAlarm(this, HEARTBEAT_INTERVAL_MS);
         }
+    }
+
+    @Override
+    public void onTimeout(int startId) {
+        stopSelf();
+    }
+
+    @Override
+    public void onTimeout(int startId, int fgsType) {
+        stopSelf();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
         AndroidUtilities.cancelRunOnUIThread(heartbeatRunnable);
+        stopForeground(true);
         if (isKeepAliveEnabled()) {
-            scheduleWakeupAlarm(this, 5000L);
-            sendStartBroadcast(this);
+            scheduleWakeupAlarm(this, HEARTBEAT_INTERVAL_MS);
         } else {
             cancelWakeupAlarm(this);
         }
@@ -90,53 +116,42 @@ public class NotificationsService extends Service {
 
     public static void onPushServiceTick(boolean enabled, boolean fromBackgroundWakeup) {
         Context context = ApplicationLoader.applicationContext;
-        if (context != null) {
-            clearLegacyForegroundNotification(context);
-        }
-        AndroidUtilities.cancelRunOnUIThread(heartbeatRunnable);
         if (!enabled) {
             if (context != null) {
                 cancelWakeupAlarm(context);
             }
             return;
         }
+        ApplicationLoader.postInitApplication();
         ensurePushConnectionsAlive(fromBackgroundWakeup);
         if (context != null) {
             scheduleWakeupAlarm(context, HEARTBEAT_INTERVAL_MS);
         }
-        AndroidUtilities.runOnUIThread(heartbeatRunnable, HEARTBEAT_INTERVAL_MS);
     }
 
-    private static boolean isKeepAliveEnabled() {
+    public static boolean isKeepAliveEnabled() {
         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
-        return preferences.getBoolean("pushService", true);
+        if (preferences.contains("pushService")) {
+            return preferences.getBoolean("pushService", true);
+        }
+        return MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", true);
     }
 
     private static void ensurePushConnectionsAlive(boolean startKeepAliveJob) {
-        boolean anyActive = false;
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
             if (UserConfig.getInstance(a).isClientActivated()) {
                 ConnectionsManager cm = ConnectionsManager.getInstance(a);
                 boolean pushEnabled = cm.isPushConnectionEnabled();
                 cm.setPushConnectionEnabled(pushEnabled);
                 if (pushEnabled) {
-                    anyActive = true;
+                    if (startKeepAliveJob) {
+                        KeepAliveJob.startJob();
+                        startKeepAliveJob = false;
+                    }
                     cm.checkConnection();
                     cm.resumeNetworkMaybe();
                 }
             }
-        }
-        if (startKeepAliveJob && anyActive) {
-            KeepAliveJob.startJob();
-        }
-    }
-
-    private static void sendStartBroadcast(Context context) {
-        try {
-            Intent intent = new Intent("org.telegram.start");
-            intent.setPackage(context.getPackageName());
-            context.sendBroadcast(intent);
-        } catch (Throwable ignore) {
         }
     }
 
@@ -153,7 +168,8 @@ public class NotificationsService extends Service {
             } else {
                 alarms.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pendingIntent);
             }
-        } catch (Throwable ignore) {
+        } catch (RuntimeException e) {
+            FileLog.e(e);
         }
     }
 
@@ -163,7 +179,8 @@ public class NotificationsService extends Service {
             if (alarms != null) {
                 alarms.cancel(getWakeupPendingIntent(context));
             }
-        } catch (Throwable ignore) {
+        } catch (RuntimeException e) {
+            FileLog.e(e);
         }
     }
 
@@ -179,16 +196,46 @@ public class NotificationsService extends Service {
         );
     }
 
-    private static void clearLegacyForegroundNotification(Context context) {
+    private boolean startForegroundCompat() {
         try {
-            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) {
-                nm.cancel(LEGACY_NOTIFICATION_ID);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    nm.deleteNotificationChannel(LEGACY_CHANNEL_ID);
-                }
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm != null) {
+                NotificationChannel channel = new NotificationChannel(CHANNEL_ID,
+                        getString(R.string.NotificationsService), NotificationManager.IMPORTANCE_LOW);
+                channel.setSound(null, null);
+                channel.enableVibration(false);
+                channel.setShowBadge(false);
+                nm.createNotificationChannel(channel);
             }
-        } catch (Throwable ignore) {
+
+            Intent openIntent = new Intent(this, LaunchActivity.class);
+            openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            PendingIntent contentIntent = PendingIntent.getActivity(this, NOTIFICATION_ID, openIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.notification)
+                    .setContentTitle(getString(R.string.NotificationsService))
+                    .setContentText(getString(R.string.MoagramBackgroundConnectionActive))
+                    .setContentIntent(contentIntent)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
+                    .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                    .setOngoing(true)
+                    .setSilent(true)
+                    .setShowWhen(false)
+                    .build();
+            if (Build.VERSION.SDK_INT >= 34) {
+                // A persistent incoming-message connection is not a finite
+                // data sync or a relay between devices (remoteMessaging).
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+            } else {
+                startForeground(NOTIFICATION_ID, notification);
+            }
+            return true;
+        } catch (RuntimeException e) {
+            FileLog.e(e);
+            return false;
         }
     }
 }

@@ -514,9 +514,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     public ActionBarMenuItem searchItem;
     private ActionBarMenuItem optionsItem;
     private ActionBarMenuItem speedItem;
-    private final static int SEARCH_OPTION_PRIVATE_CHATS = 1001;
-    private ActionBarMenuItem searchFilterItem;
-    private ActionBarMenuSubItem privateChatsSubItem;
     public static boolean switchingTheme;
     private ActionBarMenuItem doneItem;
     private ProxyDrawable proxyDrawable;
@@ -3352,19 +3349,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
 
             fragmentSearchField.addAdditionalIcon(speedItem);
 
-            searchFilterItem = menu.addItem(-48, R.drawable.ic_ab_other);
-            AndroidUtilities.removeFromParent(searchFilterItem);
-            searchFilterItem.setSubMenuOpenSide(2);
-            privateChatsSubItem = searchFilterItem.addSubItem(SEARCH_OPTION_PRIVATE_CHATS, R.drawable.msg_channel, LocaleController.getString(R.string.SearchHideJoined), true);
-            privateChatsSubItem.setChecked(SharedConfig.searchHideJoined);
-            searchFilterItem.setOnClickListener(v -> {
-                if (privateChatsSubItem != null) {
-                    privateChatsSubItem.setChecked(SharedConfig.searchHideJoined);
-                }
-                searchFilterItem.toggleSubMenu();
-            });
-            fragmentSearchField.addAdditionalIcon(searchFilterItem);
-
             fragmentSearchField.updateColors();
         }
 
@@ -3981,33 +3965,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         actionBar.setActionBarMenuOnItemClick(new ActionBar.ActionBarMenuOnItemClick() {
             @Override
             public void onItemClick(int id) {
-                if (id == SEARCH_OPTION_PRIVATE_CHATS) {
-                    SharedConfig.toggleSearchHideJoined();
-                    if (privateChatsSubItem != null) {
-                        privateChatsSubItem.setChecked(SharedConfig.searchHideJoined);
-                    }
-                    BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
-                        R.drawable.msg_channel,
-                        SharedConfig.searchHideJoined ? LocaleController.getString(R.string.SearchHideJoinedBulletinOn) : LocaleController.getString(R.string.SearchHideJoinedBulletinOff)
-                    ).show();
-                    if (searchViewPager != null) {
-                        if (searchViewPager.dialogsSearchAdapter != null) {
-                            searchViewPager.dialogsSearchAdapter.notifyDataSetChanged();
-                        }
-                        if (searchViewPager.channelsSearchAdapter != null) {
-                            searchViewPager.channelsSearchAdapter.updateMyChannels();
-                            searchViewPager.channelsSearchAdapter.update(true);
-                        }
-                        if (searchViewPager.groupsSearchAdapter != null) {
-                            searchViewPager.groupsSearchAdapter.updateMyGroups();
-                            searchViewPager.groupsSearchAdapter.update(true);
-                        }
-                        if (fragmentSearchField != null && fragmentSearchField.editText != null) {
-                            searchViewPager.onTextChanged(fragmentSearchField.editText.getText().toString());
-                        }
-                    }
-                    return;
-                }
                 if ((id == SearchViewPager.forwardItemId || id == SearchViewPager.gotoItemId || id == SearchViewPager.deleteItemId || id == SearchViewPager.speedItemId) && searchViewPager != null) {
                     searchViewPager.onActionBarItemClick(id);
                     return;

@@ -8,6 +8,7 @@ python3 Tools/tests/test-ghost-requests.py
 python3 Tools/tests/test-ghost-settings.py
 python3 Tools/tests/test-photo-permissions.py
 python3 Tools/tests/test-contact-sorting.py
+python3 Tools/tests/test-notification-service.py
 python3 Tools/tests/test-moagram-updates.py
 python3 Tools/tests/test-update-flow.py
 python3 Tools/tests/test-update-layout.py

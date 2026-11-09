@@ -33,8 +33,11 @@ public class KeepAliveJob extends JobIntentService {
                     startingJob = true;
                 }
                 enqueueWork(ApplicationLoader.applicationContext, KeepAliveJob.class, 1000, new Intent());
-            } catch (Exception ignore) {
-
+            } catch (Exception e) {
+                synchronized (sync) {
+                    startingJob = false;
+                }
+                FileLog.e(e);
             }
         });
     }

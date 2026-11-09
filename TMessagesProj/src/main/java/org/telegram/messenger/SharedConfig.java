@@ -282,32 +282,8 @@ public class SharedConfig {
     public static boolean saveDeletedMessages = true;
     public static boolean saveDeletedMedia = true;
     public static boolean saveEditHistory = true;
-    public static boolean searchHideJoined = false;
-    public static boolean searchShowJoinedPrivateChats = true;
     public static boolean keepSelfDestructingMedia = false;
     public static boolean cacheStoryViewers = true;
-
-    public static void toggleSearchHideJoined() {
-        setSearchHideJoined(!searchHideJoined);
-    }
-
-    public static void setSearchHideJoined(boolean hide) {
-        searchHideJoined = hide;
-        searchShowJoinedPrivateChats = !hide;
-        ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", Activity.MODE_PRIVATE)
-                .edit()
-                .putBoolean("searchHideJoined", searchHideJoined)
-                .putBoolean("searchShowJoinedPrivateChats", searchShowJoinedPrivateChats)
-                .apply();
-    }
-
-    public static void toggleSearchShowJoinedPrivateChats() {
-        toggleSearchHideJoined();
-    }
-
-    public static void setSearchShowJoinedPrivateChats(boolean show) {
-        setSearchHideJoined(!show);
-    }
 
     public static void setIgnoreAllRestrictions(boolean enabled) {
         ignoreAllRestrictions = enabled;
@@ -800,8 +776,6 @@ public class SharedConfig {
             useSurfaceInStories = preferences.getBoolean("useSurfaceInStories", Build.VERSION.SDK_INT >= 30);
             payByInvoice = preferences.getBoolean("payByInvoice", false);
             photoViewerBlur = preferences.getBoolean("photoViewerBlur", true);
-            searchHideJoined = preferences.getBoolean("searchHideJoined", !preferences.getBoolean("searchShowJoinedPrivateChats", true));
-            searchShowJoinedPrivateChats = !searchHideJoined;
             multipleReactionsPromoShowed = preferences.getBoolean("multipleReactionsPromoShowed", false);
             callEncryptionHintDisplayedCount = preferences.getInt("callEncryptionHintDisplayedCount", 0);
             debugVideoQualities = preferences.getBoolean("debugVideoQualities", false);
