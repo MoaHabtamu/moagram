@@ -2501,7 +2501,7 @@
     <string name="DeleteLocalizationText">Are you sure you want to delete **%1$s** language pack?</string>
     <string name="IncorrectLocalization">Incorrect localization file</string>
     <string name="NotificationsService">Keep-Alive Service</string>
-    <string name="NotificationsServiceInfo">Keep Moagram running with a silent ongoing notification for reliable message delivery.</string>
+    <string name="NotificationsServiceInfo">Keep Moagram running with a silent notification for reliable message delivery.</string>
     <string name="NotificationsServiceConnection">Background Connection</string>
     <string name="NotificationsServiceConnectionInfo">Keep a low impact background connection to Moagram for reliable notifications.</string>
     <string name="SortBy">Sort By</string>

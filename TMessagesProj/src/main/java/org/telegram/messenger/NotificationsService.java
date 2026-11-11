@@ -228,7 +228,9 @@ public class NotificationsService extends Service {
                     .setContentIntent(contentIntent)
                     .setPriority(NotificationCompat.PRIORITY_LOW)
                     .setCategory(NotificationCompat.CATEGORY_SERVICE)
-                    .setOngoing(true)
+                    // Android 13+ allows dismissing foreground-service notices
+                    // without stopping the service. Older versions may pin them.
+                    .setOngoing(false)
                     .setSilent(true)
                     .setShowWhen(false)
                     .build();

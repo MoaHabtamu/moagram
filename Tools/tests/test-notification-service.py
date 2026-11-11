@@ -252,7 +252,7 @@ public class NotificationServiceTest {
             NotificationsService service=new NotificationsService(); service.onCreate();
             check(service.promoted==1 && init==0,"promote before account init "+sdk);
             check(service.type==(sdk>=34 ? 1<<30 : sdk>=29 ? 1 : 0),"FGS type "+sdk);
-            check(service.notification.silent && service.notification.ongoing,"silent ongoing notice "+sdk);
+            check(service.notification.silent && !service.notification.ongoing,"silent notice allows dismissal where supported "+sdk);
             check(service.notification.priority==NotificationCompat.PRIORITY_LOW,"visible priority "+sdk);
             check(service.notification.content.intent.target==LaunchActivity.class,"tap opens app "+sdk);
             check((service.notification.content.flags & PendingIntent.FLAG_IMMUTABLE)!=0,"immutable intent "+sdk);
