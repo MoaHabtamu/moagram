@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "package_name": "org.moagram.messenger.web",
-  "version_code": 7291009,
-  "version_name": "13.2.1-Moagram.1",
+  "version_code": 7291019,
+  "version_name": "13.2.1-Moagram.2",
   "min_sdk": 23,
-  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.2.1-moagram.1/Moagram-13.2.1-preview.1.apk",
-  "sha256": "56672ca35fe229552ffb8df6047de1f20161fc2d182c72a2fe30d2b54cfbacf4",
+  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.2.1-moagram.2/Moagram-13.2.1-preview.2.apk",
+  "sha256": "7e88449ef87a5a4a8d8ac4de000707a6b392c025fc7ea8faf1efb65441948679",
   "size": 79648256,
   "critical_below_version_code": 7291009,
-  "notes": "Moagram 13.2.1 preview 1\n\n- Updates the Telegram base to 13.2.1 while retaining Moagram features.\n- Makes the updates page match the other settings pages, with shorter text.\n- Removes the install-count checkbox. Anonymous usage reporting remains on by default; previously saved opt-outs are respected. Reports contain a random install ID and app version, with no Telegram account, phone number, or message data.\n- Includes the background notification fixes from preview 11.\n\nAndroid 6.0 or later. Install over your existing Moagram app to keep accounts and settings.\n",
+  "notes": "Moagram 13.2.1 preview 2\n\n- Lets you swipe away the silent Keep-Alive Service notification on Android 13 and newer without stopping the service.\n- Keeps the background connection and automatic startup behavior unchanged.\n\nOlder Android versions may keep the notification pinned. The notification can reappear when the service starts again.\n\nAndroid 6.0 or later. Install over your existing Moagram app to keep accounts and settings.\n",
   "critical_message": "This update brings Telegram 13.2.1, the latest Moagram fixes, and a simpler update screen. Please install it.",
   "usage_url": "https://moagram-usage.moagram-usage.workers.dev/v1/event"
 }
