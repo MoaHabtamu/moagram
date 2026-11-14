@@ -9,6 +9,6 @@
   "size": 80429853,
   "critical_below_version_code": 7291009,
   "notes": "Moagram 13.2.2 preview 1\n\n- Updates Moagram to Telegram 13.2.2.\n- Keeps all Moagram features and fixes from 13.2.1 preview 2, including the dismissible Keep-Alive Service notification on Android 13 and newer.\n\nAndroid 6.0 or later. Install over your existing Moagram app to keep accounts and settings.\n",
-  "critical_message": "This update brings Telegram 13.2.1, the latest Moagram fixes, and a simpler update screen. Please install it.",
+  "critical_message": "This update brings Telegram 13.2.2, the latest Moagram fixes, and a simpler update screen. Please install it.",
   "usage_url": "https://moagram-usage.moagram-usage.workers.dev/v1/event"
 }
