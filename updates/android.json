@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "package_name": "org.moagram.messenger.web",
-  "version_code": 7303019,
-  "version_name": "13.2.2-Moagram.2",
+  "version_code": 7303029,
+  "version_name": "13.2.2-Moagram.3",
   "min_sdk": 23,
-  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.2.2-moagram.2/Moagram-13.2.2-preview.2.apk",
-  "sha256": "e3a506ded015a54b1d27469aa0ceae429037bd9fd22a305825e15d604db0ea04",
-  "size": 80436877,
-  "critical_below_version_code": 7303019,
-  "notes": "Moagram 13.2.2 preview 2\n\n- Adds a unified Settings -> Moagram Settings hub for Ghost Mode, Hidden Chats, Local History & Media, Repeating Messages, Interface & Confirmations, Background & Delivery Health, and Updates.\n- Adds a Ghost Mode quick-toggle button in the chat list header and a per-chat Mark as Read Now action when Ghost Read is enabled.\n- Splits Local History & Media into its own app-wide settings screen and fixes retention toggles when Ghost Mode is off.\n- Upgrades Hidden Chats settings to a dedicated screen and adds an account-wide Repeating Messages overview across all chats.\n- Adds optional confirmations for calls, stickers, and GIFs, toggles to hide the Stories bar or Gift button, disable next-channel pull, show seconds in timestamps, and show copyable User/Group/Channel IDs on profiles.\n- Fixes slow/stalled file downloads (replacing the old 1 MB chunk mod that collided with Telegram 13.x's 2 MB download byte budget) and adds a toggleable Download Speed Boost using 4 parallel connections with 256 KB pipelined chunks.\n- Improves anonymous active-use reporting accuracy by excluding debug and logged-out launches, caching the collector URL, refreshing rolling 24-hour activity every 6 hours, and retrying when network reconnects.\n\nAndroid 6.0 or later. Install over your existing Moagram app to keep accounts and settings.\n",
-  "critical_message": "This update brings the new Moagram Settings hub, faster file downloads with Download Speed Boost, Ghost Mode quick controls, and improved usage reporting. Please install it.",
+  "apk_url": "https://github.com/MoaHabtamu/moagram/releases/download/v13.2.2-moagram.3/Moagram-13.2.2-preview.3.apk",
+  "sha256": "f00f3187d6549187677e0c78567ef3f6b7fb2bd065e4641afbf5bcc628f8617a",
+  "size": 80437608,
+  "critical_below_version_code": 7303029,
+  "notes": "Moagram 13.2.2 preview 3\n\n- Fixes phone heating and idle battery drain caused by the background notification service's 3-minute network wakeup loop, while keeping instant background notifications via Telegram's native push socket.\n- Stops re-posting the dismissed Keep-Alive notification every time you reopen the app.\n- Upgrades Download Speed Boost to 8 parallel connections with 512 KB pipelined chunks (8 MB in-flight window) for faster downloads on distant datacenters and lossy mobile networks.\n\nAndroid 6.0 or later. Install over your existing Moagram app to keep accounts and settings.\n",
+  "critical_message": "This update fixes background battery drain and phone heating, and upgrades Download Speed Boost to 8 parallel connections with 512 KB chunks. Please install it.",
   "usage_url": "https://moagram-usage.moagram-usage.workers.dev/v1/event"
 }
