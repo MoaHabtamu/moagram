@@ -118,6 +118,7 @@ import org.telegram.messenger.DocumentObject;
 import org.telegram.messenger.DownloadController;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
+import org.telegram.messenger.MoagramConfig;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FlagSecureReason;
 import org.telegram.messenger.ImageLoader;
@@ -15563,14 +15564,17 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
      * before a cell lays it out (RichWidgetBlock#estimateSafeArea).
      */
     public static String timeString(MessageObject current, MessageObject message, boolean edited, int editDate) {
+        org.telegram.messenger.time.FastDateFormat dayFormatter = MoagramConfig.isShowSecondsInTimestamps()
+                ? LocaleController.getInstance().getFormatterDayWithSeconds()
+                : LocaleController.getInstance().getFormatterDay();
         if (current.notime || current.isSponsored() || current.isQuickReply() || current.isWelcomeMessage()) {
             return "";
         } else if (current.scheduled && current.messageOwner.date == 0x7FFFFFFE) {
             return "";
         } else if (current.realDate != 0) {
-            return LocaleController.formatSmallDateChat(current.realDate) + ", " + LocaleController.getInstance().getFormatterDay().format((long) (current.realDate) * 1000);
+            return LocaleController.formatSmallDateChat(current.realDate) + ", " + dayFormatter.format((long) (current.realDate) * 1000);
         } else if (current.isRepostPreview) {
-            return LocaleController.formatSmallDateChat(message.messageOwner.date) + ", " + LocaleController.getInstance().getFormatterDay().format((long) (message.messageOwner.date) * 1000);
+            return LocaleController.formatSmallDateChat(message.messageOwner.date) + ", " + dayFormatter.format((long) (message.messageOwner.date) * 1000);
         } else if (edited) {
             if (AppGlobalConfig.getInstance(current.currentAccount).messagePrimaryEditedDate.get()) {
                 if (editDate == 0 && current.isEditing()) {
@@ -15578,7 +15582,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
                 }
                 return LocaleController.formatPmEditedDate(editDate);
             }
-            return getString(R.string.EditedMessage) + " " + LocaleController.getInstance().getFormatterDay().format((long) (message.messageOwner.date) * 1000);
+            return getString(R.string.EditedMessage) + " " + dayFormatter.format((long) (message.messageOwner.date) * 1000);
         } else if (current.isSaved && current.messageOwner.fwd_from != null && (current.messageOwner.fwd_from.date != 0 || current.messageOwner.fwd_from.saved_date != 0)
                 // A widget keeps its time alone in Saved Messages: the pill over its corner stays short.
                 && !(MessageObject.getMedia(current.messageOwner) instanceof TLRPC.TL_messageMediaWidget)) {
@@ -15588,7 +15592,7 @@ public class ChatMessageCell extends BaseCell implements SeekBar.SeekBarDelegate
             }
             return LocaleController.formatSeenDate(date);
         }
-        return LocaleController.getInstance().getFormatterDay().format((long) (message.messageOwner.date) * 1000);
+        return dayFormatter.format((long) (message.messageOwner.date) * 1000);
     }
 
     void measureTime(MessageObject messageObject) {

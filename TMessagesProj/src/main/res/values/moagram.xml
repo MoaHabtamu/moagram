@@ -101,4 +101,133 @@
     <string name="MoagramUpdateAttention">Update needs attention</string>
     <string name="MoagramUpdateNeedsAttention">Update needs attention</string>
     <string name="MoagramBackgroundConnectionActive">Background connection active for incoming messages</string>
+
+    <!-- Moagram Settings hub & UX mods -->
+    <string name="MoagramSettings">Moagram Settings</string>
+    <string name="MoagramSettingsSubtitle">Privacy, hidden chats, repeats, and interface</string>
+    <string name="MoagramFeaturesHeader">Moagram Features</string>
+    <string name="MoagramScopeThisAccount">This account</string>
+    <string name="MoagramScopeAllAccounts">All accounts</string>
+    <string name="MoagramEnabledCount">%1$d enabled</string>
+    <string name="MoagramActiveCount">%1$d active</string>
+    <string name="MoagramPausedCount">%1$d paused</string>
+    <string name="MoagramNone">None</string>
+
+    <!-- Ghost Mode quick controls -->
+    <string name="GhostModeEnabledToast">Ghost Mode enabled</string>
+    <string name="GhostModeDisabledToast">Ghost Mode disabled</string>
+    <string name="GhostModeMarkReadNow">Mark as Read Now</string>
+    <string name="GhostModeMarkedReadToast">Chat marked as read</string>
+    <string name="GhostModeToggleButton">Toggle Ghost Mode</string>
+    <string name="GhostModeLocalHistoryLink">Local History &amp; Media</string>
+    <string name="GhostModeLocalHistoryLinkInfo">Deleted messages, edit history, cached story viewers, and saving controls are configured under Local History &amp; Media.</string>
+
+    <!-- Local History & Media -->
+    <string name="LocalHistoryTitle">Local History &amp; Media</string>
+    <string name="LocalHistoryMessagesHeader">Messages &amp; Media</string>
+    <string name="LocalHistoryStoriesHeader">Stories</string>
+    <string name="LocalHistoryRestrictionsHeader">Content Controls</string>
+    <string name="LocalHistoryScopeInfo">These settings apply to all accounts on this device. Retained messages, edit history, and cached media stay on this device only and can use additional local storage.</string>
+
+    <!-- Hidden Chats Settings -->
+    <string name="HiddenChatsTitle">Hidden Chats</string>
+    <string name="HiddenChatsOpen">Open Hidden Chats</string>
+    <string name="HiddenChatsCount">%1$d hidden</string>
+    <string name="HiddenChatsPasscodeHeader">Passcode Protection</string>
+    <string name="HiddenChatsPasscodeMode">Passcode Mode</string>
+    <string name="HiddenChatsPasscodeTelegram">Telegram Lock Passcode</string>
+    <string name="HiddenChatsPasscodeCustom">Separate PIN</string>
+    <string name="HiddenChatsUseTelegramPasscode">Use Telegram Lock Passcode</string>
+    <string name="HiddenChatsUseCustomPin">Use Custom PIN for Hidden Chats</string>
+    <string name="HiddenChatsChangePin">Change Hidden Chats PIN</string>
+    <string name="HiddenChatsAppLockTitle">Telegram App Lock</string>
+    <string name="HiddenChatsAppLockPrompt">Telegram lock passcode is not configured yet. Would you like to set a passcode now?</string>
+    <string name="HiddenChatsSetPasscode">Set Passcode</string>
+    <string name="HiddenChatsPasscodeTelegramEnabled">Hidden chats now protected by Telegram lock passcode.</string>
+    <string name="HiddenChatsPasscodeTelegramUsing">Using Telegram lock passcode for hidden chats.</string>
+    <string name="HiddenChatsPasscodeCustomUsing">Using custom PIN for hidden chats.</string>
+    <string name="HiddenChatsPasscodeCustomSet">Custom PIN set for hidden chats.</string>
+    <string name="HiddenChatsPinUpdated">Hidden chats PIN updated.</string>
+    <string name="HiddenChatsPinCreated">Hidden chats PIN created.</string>
+    <string name="HiddenChatsTriggersHeader">Opening Triggers</string>
+    <string name="HiddenChatsTriggersInfo">Choose how to open Hidden Chats from the main chat list. Enable at least one trigger you can remember.</string>
+    <string name="HiddenChatsTriggerSearch">Tap &amp; hold search icon</string>
+    <string name="HiddenChatsTriggerTitle">Long-press app title</string>
+    <string name="HiddenChatsTriggerDoubleTap">Double-tap app title</string>
+    <string name="HiddenChatsTriggerAllTab">Long-press \'All Chats\' tab</string>
+    <string name="HiddenChatsTriggerButton">Top-bar lock button</string>
+    <string name="HiddenChatsTriggerMenu">Long-press menu icon</string>
+    <string name="HiddenChatsTriggerSummaryAll">All triggers</string>
+    <string name="HiddenChatsTriggerSummarySearch">Search icon</string>
+    <string name="HiddenChatsTriggerSummaryTitle">App title</string>
+    <string name="HiddenChatsTriggerSummaryDoubleTap">Double-tap title</string>
+    <string name="HiddenChatsTriggerSummaryAllTab">\'All\' tab</string>
+    <string name="HiddenChatsTriggerSummaryButton">Top button</string>
+    <string name="HiddenChatsTriggerSummaryMenu">Menu icon</string>
+    <string name="HiddenChatsNotificationsHeader">Notifications</string>
+    <string name="HiddenChatsHideNotifications">Hide Notifications</string>
+    <string name="HiddenChatsHideNotificationsInfo">Suppress all notifications for hidden chats.</string>
+    <string name="HiddenChatsDisguiseNotifications">Disguise Notifications</string>
+    <string name="HiddenChatsDisguiseNotificationsInfo">Hide sender names and message text in notifications for hidden chats.</string>
+
+    <!-- Global Repeating Messages -->
+    <string name="GlobalRepeatsTitle">Repeating Messages</string>
+    <string name="GlobalRepeatsEmpty">No repeating messages scheduled on this account. Long-press the send button in any chat and choose Schedule Message to create a repeating rule.</string>
+    <string name="GlobalRepeatsOpenChat">Open Chat</string>
+    <string name="GlobalRepeatsRuleSummary">Every %1$s · %2$d queued</string>
+    <string name="GlobalRepeatsRuleSummaryPaused">Paused · Every %1$s · %2$d queued</string>
+    <string name="GlobalRepeatsRuleSummaryStopping">Stopping · Every %1$s</string>
+    <string name="GlobalRepeatsNextSend">Next: %1$s</string>
+    <string name="GlobalRepeatsUnknownChat">Chat %1$d</string>
+    <string name="GlobalRepeatsInfo">Tap any rule to open its chat, retry a paused schedule, or stop future occurrences.</string>
+
+    <!-- Background Health -->
+    <string name="BackgroundHealthHeader">Background &amp; Delivery Health</string>
+    <string name="BackgroundHealthBattery">Battery Optimization</string>
+    <string name="BackgroundHealthBatteryUnrestricted">Unrestricted</string>
+    <string name="BackgroundHealthBatteryRestricted">Restricted</string>
+    <string name="BackgroundHealthNotifications">System Notifications</string>
+    <string name="BackgroundHealthAllowed">Allowed</string>
+    <string name="BackgroundHealthBlocked">Blocked</string>
+    <string name="BackgroundHealthKeepAlive">Keep-Alive &amp; Background Sync</string>
+    <string name="BackgroundHealthActive">Active</string>
+    <string name="BackgroundHealthPartial">Partial</string>
+    <string name="BackgroundHealthDisabled">Disabled</string>
+    <string name="BackgroundHealthInfo">Allowing unrestricted battery usage and notifications helps Moagram deliver incoming messages promptly and refill repeating schedules while closed.</string>
+
+    <!-- Interface & Confirmations (Phase 2 UX) -->
+    <string name="MoagramUxTitle">Interface &amp; Confirmations</string>
+    <string name="MoagramUxConfirmationsHeader">Accidental-Action Guards</string>
+    <string name="MoagramUxConfirmCalls">Confirm Before Calling</string>
+    <string name="MoagramUxConfirmCallsInfo">Ask for confirmation before starting a voice or video call.</string>
+    <string name="MoagramUxConfirmStickers">Confirm Before Sending Stickers</string>
+    <string name="MoagramUxConfirmStickersInfo">Show a confirmation prompt before sending a sticker.</string>
+    <string name="MoagramUxConfirmGifs">Confirm Before Sending GIFs</string>
+    <string name="MoagramUxConfirmGifsInfo">Show a confirmation prompt before sending a GIF.</string>
+    <string name="MoagramUxConfirmCallTitle">Start Call?</string>
+    <string name="MoagramUxConfirmVoiceCallMessage">Start a voice call with %1$s?</string>
+    <string name="MoagramUxConfirmVideoCallMessage">Start a video call with %1$s?</string>
+    <string name="MoagramUxConfirmGroupCallMessage">Start or join the voice chat in %1$s?</string>
+    <string name="MoagramUxConfirmStickerTitle">Send Sticker?</string>
+    <string name="MoagramUxConfirmStickerMessage">Send this sticker to the current chat?</string>
+    <string name="MoagramUxConfirmGifTitle">Send GIF?</string>
+    <string name="MoagramUxConfirmGifMessage">Send this GIF to the current chat?</string>
+
+    <string name="MoagramUxInterfaceHeader">Chat List &amp; Compose</string>
+    <string name="MoagramUxShowGhostButton">Ghost Mode Quick Toggle</string>
+    <string name="MoagramUxShowGhostButtonInfo">Show a Ghost Mode toggle icon in the main chat list header. Tap to toggle, long-press to open settings.</string>
+    <string name="MoagramUxHideStories">Hide Stories Bar</string>
+    <string name="MoagramUxHideStoriesInfo">Hide the Stories strip at the top of the chat list.</string>
+    <string name="MoagramUxHideGiftButton">Hide Gift Button</string>
+    <string name="MoagramUxHideGiftButtonInfo">Hide the Send Gift icon inside the chat message bar.</string>
+    <string name="MoagramUxDisableNextChannel">Disable Next-Channel Pull</string>
+    <string name="MoagramUxDisableNextChannelInfo">Prevent pulling up at the bottom of a channel from jumping to the next unread channel.</string>
+
+    <string name="MoagramUxDetailsHeader">Messages &amp; Profiles</string>
+    <string name="MoagramUxShowSeconds">Show Seconds in Timestamps</string>
+    <string name="MoagramUxShowSecondsInfo">Display exact seconds alongside hours and minutes on message timestamps.</string>
+    <string name="MoagramUxShowProfileIds">Show IDs on Profiles</string>
+    <string name="MoagramUxShowProfileIdsInfo">Display the numeric Telegram ID on user, group, and channel profiles. Tap to copy.</string>
+    <string name="MoagramProfileIdLabel">ID</string>
+    <string name="MoagramProfileIdCopied">ID copied to clipboard</string>
 </resources>

@@ -41,6 +41,8 @@ public final class LocalRepeatController extends BaseController {
 
     public static final class RepeatInfo {
         public long id;
+        public long dialogId;
+        public long nextDate;
         public int interval;
         public int queued;
         public String text;
@@ -121,17 +123,46 @@ public final class LocalRepeatController extends BaseController {
         ArrayList<RepeatInfo> result = new ArrayList<>();
         for (Rule rule : rules) {
             if (rule.dialogId != dialogId) continue;
-            RepeatInfo info = new RepeatInfo();
-            info.id = rule.id;
-            info.interval = rule.interval;
-            info.queued = rule.queued.size();
-            info.text = rule.seedText;
-            info.paused = rule.paused;
-            info.stopping = rule.stopping;
-            info.error = rule.error;
-            result.add(info);
+            result.add(toRepeatInfo(rule));
         }
         return result;
+    }
+
+    public synchronized ArrayList<RepeatInfo> getAllRepeats() {
+        ArrayList<RepeatInfo> result = new ArrayList<>();
+        for (Rule rule : rules) {
+            result.add(toRepeatInfo(rule));
+        }
+        result.sort((a, b) -> {
+            if (a.paused != b.paused) {
+                return a.paused ? -1 : 1;
+            }
+            if (a.stopping != b.stopping) {
+                return a.stopping ? 1 : -1;
+            }
+            return Long.compare(a.nextDate, b.nextDate);
+        });
+        return result;
+    }
+
+    private RepeatInfo toRepeatInfo(Rule rule) {
+        RepeatInfo info = new RepeatInfo();
+        info.id = rule.id;
+        info.dialogId = rule.dialogId;
+        long earliestQueued = Long.MAX_VALUE;
+        for (Integer queuedDate : rule.queued.values()) {
+            if (queuedDate != null && queuedDate > 0 && queuedDate < earliestQueued) {
+                earliestQueued = queuedDate;
+            }
+        }
+        info.nextDate = earliestQueued != Long.MAX_VALUE ? earliestQueued : rule.nextDate;
+        info.interval = rule.interval;
+        info.queued = rule.queued.size();
+        info.text = rule.seedText;
+        info.paused = rule.paused;
+        info.stopping = rule.stopping;
+        info.error = rule.error;
+        return info;
     }
 
     public synchronized int getRepeatPeriod(long dialogId, int messageId) {

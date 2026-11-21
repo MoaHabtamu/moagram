@@ -148,6 +148,7 @@ import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.GhostModeController;
+import org.telegram.messenger.MoagramConfig;
 import org.telegram.messenger.FlagSecureReason;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
@@ -676,6 +677,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private int userInfoRow;
     private int channelInfoRow;
     private int usernameRow;
+    private int peerIdRow;
     private int notificationsDividerRow;
     private int notificationsRow;
     private int bizHoursRow;
@@ -4473,6 +4475,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 openAddMember();
             } else if (position == usernameRow) {
                 processOnClickOrPress(position, view, x, y);
+            } else if (position == peerIdRow) {
+                String idText = getPeerIdText();
+                if (!TextUtils.isEmpty(idText)) {
+                    AndroidUtilities.addToClipboard(idText);
+                    BulletinFactory.of(ProfileActivity.this).createCopyBulletin(LocaleController.getString(R.string.MoagramProfileIdCopied)).show();
+                }
             } else if (position == linkedCommunityRow) {
                 if (currentChat != null) {
                     showDialog(new CommunitySheet(this, currentChat.linked_community_id));
@@ -10942,6 +10950,19 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         return chatId != 0;
     }
 
+    private String getPeerIdText() {
+        if (userId != 0) {
+            return String.valueOf(userId);
+        }
+        if (chatId != 0) {
+            if (ChatObject.isChannel(currentChat)) {
+                return "-100" + chatId;
+            }
+            return String.valueOf(-chatId);
+        }
+        return "";
+    }
+
     private void updateRowsIds() {
         updateNotifications(false);
 
@@ -11022,6 +11043,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         locationRow = -1;
         channelInfoRow = -1;
         usernameRow = -1;
+        peerIdRow = -1;
         settingsTimerRow = -1;
         settingsKeyRow = -1;
         notificationsDividerRow = -1;
@@ -11217,6 +11239,9 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 if (user != null && username != null) {
                     usernameRow = rowCount++;
                 }
+                if (MoagramConfig.isShowProfileIds() && userId != 0) {
+                    peerIdRow = rowCount++;
+                }
                 if (userInfo != null) {
                     if (userInfo.birthday != null) {
                         birthdayRow = rowCount++;
@@ -11375,6 +11400,19 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                 if (ChatObject.isPublic(currentChat)) {
                     usernameRow = rowCount++;
                 }
+            }
+            if (MoagramConfig.isShowProfileIds() && chatId != 0) {
+                if (emptyRow < 0 && emptyRow2 < 0) {
+                    if (hasMusic || hasBalance || peerColor != null || actionsView == null) {
+                        emptyRow2 = rowCount++;
+                    } else {
+                        emptyRow = rowCount++;
+                    }
+                }
+                if (actionsView == null && infoHeaderRow == -1) {
+                    infoHeaderRow = rowCount++;
+                }
+                peerIdRow = rowCount++;
             }
             if (emptyRow < 0 && emptyRow2 < 0) {
                 if (hasMusic || hasBalance || peerColor != null || actionsView == null) {
@@ -13835,6 +13873,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                         }
                         isFragmentPhoneNumber = phoneNumber != null && phoneNumber.matches("888\\d{8}");
                         detailCell.setTextAndValue(text, LocaleController.getString(isFragmentPhoneNumber ? R.string.AnonymousNumber : R.string.PhoneMobile), false);
+                    } else if (position == peerIdRow) {
+                        detailCell.setTextAndValue(getPeerIdText(), LocaleController.getString(R.string.MoagramProfileIdLabel), false);
                     } else if (position == noteRow) {
                         final TLRPC.UserFull userInfo = getMessagesController().getUserFull(userId);
                         if (userInfo == null) return;
@@ -14655,7 +14695,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             if (position == infoHeaderRow || position == membersHeaderRow || position == settingsSectionRow2 ||
                     position == numberSectionRow || position == helpHeaderRow || position == debugHeaderRow || position == botPermissionsHeader) {
                 return VIEW_TYPE_HEADER;
-            } else if (position == phoneRow || position == locationRow || position == numberRow || position == birthdayRow) {
+            } else if (position == phoneRow || position == peerIdRow || position == locationRow || position == numberRow || position == birthdayRow) {
                 return VIEW_TYPE_TEXT_DETAIL;
             } else if (position == usernameRow || position == setUsernameRow) {
                 return VIEW_TYPE_TEXT_DETAIL_MULTILINE;
@@ -14919,6 +14959,12 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     new SearchResult(13, getString(R.string.RepeatNotifications), "repeatRow", getString(R.string.NotificationsAndSounds), R.drawable.msg_notifications, () -> f.presentFragment(new NotificationsSettingsActivity())),
 
                     new SearchResult(150, getString(R.string.GhostMode), R.drawable.msg_stories_stealth, () -> f.presentFragment(new GhostModeActivity(currentAccount))),
+                    new SearchResult(151, getString(R.string.MoagramSettings), R.drawable.msg_customize, () -> f.presentFragment(new MoagramSettingsActivity(currentAccount))),
+                    new SearchResult(152, getString(R.string.HiddenChatsTitle), getString(R.string.MoagramSettings), R.drawable.msg_secret, () -> f.presentFragment(new HiddenChatsSettingsActivity(currentAccount))),
+                    new SearchResult(153, getString(R.string.LocalHistoryTitle), getString(R.string.MoagramSettings), R.drawable.msg_archive, () -> f.presentFragment(new LocalHistoryActivity(currentAccount))),
+                    new SearchResult(154, getString(R.string.GlobalRepeatsTitle), getString(R.string.MoagramSettings), R.drawable.msg_retry, () -> f.presentFragment(new GlobalRepeatsActivity(currentAccount))),
+                    new SearchResult(155, getString(R.string.MoagramUxTitle), getString(R.string.MoagramSettings), R.drawable.msg_customize, () -> f.presentFragment(new MoagramUxActivity())),
+                    new SearchResult(156, getString(R.string.MoagramUpdates), getString(R.string.MoagramSettings), R.drawable.msg_download, () -> f.presentFragment(new MoagramUpdatesActivity())),
                     new SearchResult(100, getString(R.string.PrivacySettings), R.drawable.msg_secret, () -> f.presentFragment(new PrivacySettingsActivity())).withLink("tg://settings/privacy"),
                     new SearchResult(109, getString(R.string.TwoStepVerification), getString(R.string.PrivacySettings), R.drawable.msg2_secret, () -> f.presentFragment(new TwoStepVerificationActivity())).withLink("tg://settings/privacy/2sv"),
                     new SearchResult(124, getString(R.string.AutoDeleteMessages), getString(R.string.PrivacySettings), R.drawable.msg2_secret, () -> {
@@ -15987,6 +16033,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
             put(++pointer, userInfoRow, sparseIntArray);
             put(++pointer, channelInfoRow, sparseIntArray);
             put(++pointer, usernameRow, sparseIntArray);
+            put(++pointer, peerIdRow, sparseIntArray);
             put(++pointer, notificationsDividerRow, sparseIntArray);
             put(++pointer, reportDividerRow, sparseIntArray);
             put(++pointer, notificationsRow, sparseIntArray);

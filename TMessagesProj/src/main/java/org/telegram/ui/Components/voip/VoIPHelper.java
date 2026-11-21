@@ -34,9 +34,11 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.MoagramConfig;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SendMessagesHelper;
 import org.telegram.messenger.UserConfig;
+import org.telegram.messenger.UserObject;
 import org.telegram.messenger.voip.Instance;
 import org.telegram.messenger.voip.VoIPService;
 import org.telegram.tgnet.ConnectionsManager;
@@ -103,22 +105,34 @@ public class VoIPHelper {
 			return;
 		}
 
-		if (Build.VERSION.SDK_INT >= 23) {
-			int code;
-			ArrayList<String> permissions = new ArrayList<>();
-			if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-				permissions.add(Manifest.permission.RECORD_AUDIO);
-			}
-			if (videoCall && activity.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-				permissions.add(Manifest.permission.CAMERA);
-			}
-			if (permissions.isEmpty()) {
-				initiateCall(user, null, null, videoCall, canVideoCall, false, null, activity, null, accountInstance);
+		Runnable proceed = () -> {
+			if (Build.VERSION.SDK_INT >= 23) {
+				ArrayList<String> permissions = new ArrayList<>();
+				if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+					permissions.add(Manifest.permission.RECORD_AUDIO);
+				}
+				if (videoCall && activity.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+					permissions.add(Manifest.permission.CAMERA);
+				}
+				if (permissions.isEmpty()) {
+					initiateCall(user, null, null, videoCall, canVideoCall, false, null, activity, null, accountInstance);
+				} else {
+					activity.requestPermissions(permissions.toArray(new String[0]), videoCall ? 102 : 101);
+				}
 			} else {
-				activity.requestPermissions(permissions.toArray(new String[0]), videoCall ? 102 : 101);
+				initiateCall(user, null, null, videoCall, canVideoCall, false, null, activity, null, accountInstance);
 			}
+		};
+		if (MoagramConfig.isConfirmCalls() && user != null) {
+			String name = UserObject.getUserName(user);
+			String msg = LocaleController.formatString(videoCall ? R.string.MoagramUxConfirmVideoCallMessage : R.string.MoagramUxConfirmVoiceCallMessage, name);
+			MoagramConfig.showConfirmDialog(activity, null,
+					LocaleController.getString(R.string.MoagramUxConfirmCallTitle),
+					msg,
+					LocaleController.getString(videoCall ? R.string.VideoCall : R.string.Call),
+					proceed);
 		} else {
-			initiateCall(user, null, null, videoCall, canVideoCall, false, null, activity, null, accountInstance);
+			proceed.run();
 		}
 	}
 
@@ -150,7 +164,16 @@ public class VoIPHelper {
 			return;
 		}
 
-		initiateCall(null, chat, hash, false, false, createCall, checkJoiner, activity, fragment, accountInstance);
+		Runnable proceed = () -> initiateCall(null, chat, hash, false, false, createCall, checkJoiner, activity, fragment, accountInstance);
+		if (MoagramConfig.isConfirmCalls() && chat != null) {
+			MoagramConfig.showConfirmDialog(activity, fragment != null ? fragment.getResourceProvider() : null,
+					LocaleController.getString(R.string.MoagramUxConfirmCallTitle),
+					LocaleController.formatString(R.string.MoagramUxConfirmGroupCallMessage, chat.title != null ? chat.title : ""),
+					LocaleController.getString(R.string.Call),
+					proceed);
+		} else {
+			proceed.run();
+		}
 	}
 
 	private static void initiateCall(TLRPC.User user, TLRPC.Chat chat, String hash, boolean videoCall, boolean canVideoCall, boolean createCall, Boolean checkJoiner, final Activity activity, BaseFragment fragment, AccountInstance accountInstance) {

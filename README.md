@@ -14,18 +14,20 @@
 
 Moagram builds on [Telegram for Android](https://github.com/DrKLO/Telegram) with features for everyday scheduling, chat organization, and control over local app behavior. It connects to Telegram using your Telegram account. It is an independent project and is not affiliated with or endorsed by Telegram.
 
-The development source is based on Telegram **13.2.1** and requires **Android 6.0+**, matching the new upstream minimum. Published preview APKs may use an earlier base; check each release's notes. This is an early community project: the repeat queue has automated regression coverage, while the 13.2.1 update still needs broader device and privacy testing.
+The development source is based on Telegram **13.2.2** and requires **Android 6.0+**, matching the new upstream minimum. Published preview APKs may use an earlier base; check each release's notes. This is an early community project: the repeat queue and Moagram UX config have automated regression coverage, while the 13.2.2 update still needs broader device and privacy testing.
 
 ## Features
 
 | Feature | What it does |
 | --- | --- |
+| **Moagram Settings** | Unified hub under **Settings → Moagram Settings** for Ghost Mode, Hidden Chats, Local History & Media, Repeating Messages, Interface & Confirmations, Background Health, and Updates. |
 | **Repeating messages** | Queue up to seven future occurrences per local rule on free accounts. Moagram tries to refill them about every twelve hours while the app is closed. Opening the app is the reliable path if Android delays that wakeup. |
-| **Manage Repeats** | See queued counts, inspect errors, retry a paused rule, or stop a series. |
-| **Ghost Mode** | Configure online-presence, typing, read-receipt, and story-view behavior per account. |
-| **Hidden chats** | Hide selected chats from the normal list, choose opening shortcuts, and configure a passcode and notifications. |
-| **Local history controls** | Optional retention of received deleted messages, cached media, message revisions, and story-viewer lists. |
-| **Custom interface** | Moagram branding and additional chat controls. |
+| **Manage Repeats** | View all active and paused repeating rules across chats in **Moagram Settings → Repeating Messages** or per chat, inspect errors, retry paused rules, or stop a series. |
+| **Ghost Mode** | Configure online-presence, typing, read-receipt, and story-view behavior per account, with a header quick-toggle button and per-chat **Mark as Read Now** action. |
+| **Hidden chats** | Hide selected chats from the normal list and configure opening triggers, passcode protection, and notifications in a dedicated settings screen. |
+| **Local history & media** | Dedicated app-wide settings for retaining received deleted messages, deleted media, message edit history, self-destructing media, cached story viewers, and content saving. |
+| **Interface & confirmations** | Optional accidental-action guards (confirm calls, stickers, GIFs), hide Stories bar or Gift button, disable next-channel pull, show seconds in timestamps, and show copyable User/Chat IDs on profiles. |
+| **Background health** | One-tap visibility into Android battery optimization, notification permission, and Keep-Alive status. |
 
 Read the [feature guide](docs/FEATURES.md) for behavior and limits. Client-side privacy controls are not a guarantee of anonymity; Telegram servers and other clients can still observe account activity.
 
@@ -33,7 +35,7 @@ Read the [feature guide](docs/FEATURES.md) for behavior and limits. Client-side 
 
 1. Download the APK from [Releases](https://github.com/MoaHabtamu/moagram/releases). Preview releases are marked **Pre-release**.
 2. Follow the [installation guide](docs/USAGE.md), including the checksum and update instructions.
-3. Sign in with your Telegram account and explore **Settings → Ghost Mode**, **Settings → Hidden Chats**, or a chat's scheduling controls.
+3. Sign in with your Telegram account and explore **Settings → Moagram Settings**, **Settings → Ghost Mode**, or a chat's scheduling controls.
 
 **A repeat example:** create three Daily rules at 09:00, 09:01, and 09:02. Each rule can queue seven occurrences, for up to 21 scheduled messages across the three rules. Moagram must run and connect regularly to refill the queue; it cannot continue indefinitely if the app stays offline. [How repeats work →](docs/REPEATING_MESSAGES.md)
 

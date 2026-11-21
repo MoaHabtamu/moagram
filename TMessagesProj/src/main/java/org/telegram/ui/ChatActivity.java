@@ -158,6 +158,8 @@ import org.telegram.utils.code.highlight.CodeHighlighting;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.DocumentObject;
+import org.telegram.messenger.GhostModeController;
+import org.telegram.messenger.MoagramConfig;
 import org.telegram.messenger.DownloadController;
 import org.telegram.messenger.Emoji;
 import org.telegram.messenger.EmojiData;
@@ -1729,6 +1731,8 @@ public class ChatActivity extends BaseFragment implements
     private final static int chat_menu_topic_create = 73;
     private final static int chat_menu_topics_panel = 75;
     private final static int manage_repeats = 76;
+    private final static int ghost_mark_read = 77;
+    private ActionBarMenuItem.Item ghostMarkReadItem;
 
     private final static int id_chat_compose_panel = 1000;
 
@@ -3988,6 +3992,13 @@ public class ChatActivity extends BaseFragment implements
                     headerItem.toggleSubMenu(attach, attachItem.createView());
                 } else if (id == manage_repeats) {
                     AlertsCreator.showLocalRepeats(context, currentAccount, dialog_id, themeDelegate);
+                } else if (id == ghost_mark_read) {
+                    TLRPC.Dialog dialog = getMessagesController().dialogs_dict.get(dialog_id);
+                    if (dialog != null && dialog.top_message != 0) {
+                        getConnectionsManager().allowNextGhostReadReceipt();
+                        getMessagesController().markDialogAsRead(dialog_id, dialog.top_message, dialog.top_message, dialog.last_message_date, false, 0, 0, true, 0);
+                        BulletinFactory.of(ChatActivity.this).createSimpleBulletin(R.drawable.msg_markread, getString(R.string.GhostModeMarkedReadToast)).show();
+                    }
                 } else if (id == bot_help) {
                     getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of("/help", dialog_id, null, null, null, false, null, null, null, true, 0, 0, null, false));
                 } else if (id == bot_settings) {
@@ -4287,11 +4298,19 @@ public class ChatActivity extends BaseFragment implements
             headerItem = menu.addItem(chat_menu_options, otherIcon);
             if (currentEncryptedChat == null) {
                 headerItem.lazilyAddSubItem(manage_repeats, R.drawable.msg_retry, getString(R.string.LocalRepeatManage));
+                ghostMarkReadItem = headerItem.lazilyAddSubItem(ghost_mark_read, R.drawable.msg_markread, getString(R.string.GhostModeMarkReadNow));
+                ghostMarkReadItem.setVisibility(View.GONE);
             }
             updateTopicsPanelItem();
             headerItem.setSubMenuDelegate(new ActionBarMenuItem.ActionBarSubMenuItemDelegate() {
                 @Override
                 public void onShowSubMenu() {
+                    if (ghostMarkReadItem != null) {
+                        TLRPC.Dialog d = getMessagesController().dialogs_dict.get(dialog_id);
+                        boolean showGhostRead = GhostModeController.getInstance(currentAccount).isGhostRead()
+                                && d != null && d.top_message != 0;
+                        ghostMarkReadItem.setVisibility(showGhostRead ? View.VISIBLE : View.GONE);
+                    }
                     updateScrimSourceBitmap();
                 }
 
@@ -6737,7 +6756,7 @@ public class ChatActivity extends BaseFragment implements
                 if (!foundTopView) {
                     scrolled = super.scrollVerticallyBy(dy, recycler, state);
                 }
-                final boolean allowPullingDownScroll = !isInPollAddOptionMode() && !hasSelectedMessages();
+                final boolean allowPullingDownScroll = !MoagramConfig.isDisableNextChannelJump() && !isInPollAddOptionMode() && !hasSelectedMessages();
                 if (allowPullingDownScroll && dy > 0 && scrolled == 0 && (ChatObject.isChannel(currentChat) && !currentChat.megagroup || isTopic && !UserObject.isBotForum(currentUser)) && chatMode != MODE_SAVED && chatMode != MODE_WELCOME_MESSAGES && chatMode != MODE_SCHEDULED && chatListView.getScrollState() == RecyclerView.SCROLL_STATE_DRAGGING && !chatListView.isFastScrollAnimationRunning() && !chatListView.isMultiselect() && !isReport()) {
                     if (pullingDownOffset == 0 && pullingDownDrawable != null) {
                         if (nextChannels != null && !nextChannels.isEmpty()) {

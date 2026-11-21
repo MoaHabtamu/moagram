@@ -18,8 +18,14 @@
 | `TMessagesProj/src/main/java/org/telegram/ui/Components/ChatActivityEnterView.java` | Compose scheduling callbacks |
 | `TMessagesProj/src/main/java/org/telegram/messenger/GhostModeController.java` | Per-account Ghost Mode configuration |
 | `TMessagesProj/src/main/java/org/telegram/messenger/HiddenChatsController.java` | Per-account hidden chat state and passcode handling |
-| `TMessagesProj/src/main/java/org/telegram/ui/GhostModeActivity.java` | Custom privacy and retention settings |
-| `Tools/tests/` | Repeat callback, cadence, protocol, and simulated queue checks |
+| `TMessagesProj/src/main/java/org/telegram/messenger/MoagramConfig.java` | Isolated app-wide UX flags, confirmation dialogs, and background health checks |
+| `TMessagesProj/src/main/java/org/telegram/ui/MoagramSettingsActivity.java` | Unified Moagram Settings hub and Background Health status |
+| `TMessagesProj/src/main/java/org/telegram/ui/GhostModeActivity.java` | Account-scoped Ghost Mode settings |
+| `TMessagesProj/src/main/java/org/telegram/ui/LocalHistoryActivity.java` | App-wide deleted/edited history, story cache, and saving controls |
+| `TMessagesProj/src/main/java/org/telegram/ui/HiddenChatsSettingsActivity.java` | Dedicated Hidden Chats settings screen |
+| `TMessagesProj/src/main/java/org/telegram/ui/GlobalRepeatsActivity.java` | Account-wide overview of local repeating messages across all chats |
+| `TMessagesProj/src/main/java/org/telegram/ui/MoagramUxActivity.java` | Confirmations, de-cluttering, timestamp seconds, and profile ID toggles |
+| `Tools/tests/` | Repeat callback, cadence, protocol, simulated queue, and Moagram UX checks |
 | `docs/` | User and developer documentation |
 
 Other app modules and most native/vendor code are inherited from Telegram. Prefer focused changes to the relevant client code and avoid unrelated vendor edits.

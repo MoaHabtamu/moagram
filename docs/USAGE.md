@@ -4,7 +4,7 @@
 
 ## Download and verify
 
-Open [Moagram Releases](https://github.com/MoaHabtamu/moagram/releases) and select a release. Read its notes, then download the `.apk` asset and `SHA256SUMS.txt`. The earlier Telegram 12.10.1 preview supports Android 5.0 and later and includes ARM and x86 architectures. The updated development source uses Telegram 13.1.1 and requires Android 6.0 or later; source updates do not replace already published preview APKs.
+Open [Moagram Releases](https://github.com/MoaHabtamu/moagram/releases) and select a release. Read its notes, then download the `.apk` asset and `SHA256SUMS.txt`. The earlier Telegram 12.10.1 preview supports Android 5.0 and later and includes ARM and x86 architectures. The updated development source uses Telegram 13.2.2 and requires Android 6.0 or later; source updates do not replace already published preview APKs.
 
 On Linux, put both downloaded files in the same directory and run:
 
@@ -34,9 +34,10 @@ For builds with the updater, use **Settings → Moagram Updates → Check for up
 
 ## Find the custom features
 
-- **Settings → Ghost Mode:** account-specific presence and receipt controls, plus local retention options. See [Features](FEATURES.md).
-- **Settings → Hidden Chats:** opening shortcuts, passcode protection, and notification preferences.
-- **Chat menu → Manage Repeats:** local series, queued counts, errors, retry, and stop controls. See [Repeating messages](REPEATING_MESSAGES.md).
+- **Settings → Moagram Settings:** unified hub for Ghost Mode, Hidden Chats, Local History & Media, Repeating Messages, Interface & Confirmations, Background & Delivery Health, and Updates.
+- **Settings → Ghost Mode:** direct shortcut to account-specific presence and receipt controls (or tap the Ghost Mode icon in the main chat list header). See [Features](FEATURES.md).
+- **Settings → Moagram Settings → Hidden Chats:** opening triggers, passcode protection, and notification preferences.
+- **Settings → Moagram Settings → Repeating Messages** (or **Chat menu → Manage Repeats**): local series across chats, queued counts, errors, retry, and stop controls. See [Repeating messages](REPEATING_MESSAGES.md).
 
 Try new scheduling settings in **Saved Messages** first. Already queued scheduled messages are stored on Telegram; the local repeating rule is stored in Moagram on the device that created it.
 

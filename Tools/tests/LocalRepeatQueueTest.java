@@ -68,6 +68,7 @@ public class LocalRepeatQueueTest {
         legacyPausedRuleResumes();
         errorsAreVisibleAndRetryable();
         explicitSenderSurvivesRestart();
+        allRepeatsAggregateAndSort();
         System.out.println("LocalRepeatQueue: " + checks + " checks passed");
     }
 
@@ -131,6 +132,27 @@ public class LocalRepeatQueueTest {
         server.messages.remove(server.messages.keySet().iterator().next());
         server.advance(90000);
         check(server.messages.size() == 7 && !server.controller.getRepeats(12).get(0).paused, "Restart changed an explicitly selected sender");
+    }
+
+    private static void allRepeatsAggregateAndSort() {
+        Server server = new Server();
+        server.controller = new LocalRepeatController(0, memoryPreferences(), server);
+        int base = server.now() + 3600;
+        // Schedule a paused rule on dialog 30 first, then a later active rule on dialog 20 and an earlier active rule on dialog 10.
+        server.failRefills = true;
+        server.send(text(30, base + 3600, 2003), (response, error) -> {});
+        server.advance(30000);
+        server.failRefills = false;
+        server.send(text(20, base + 7200, 2001), (response, error) -> {});
+        server.send(text(10, base + 600, 2002), (response, error) -> {});
+        server.advance(30000);
+
+        java.util.ArrayList<LocalRepeatController.RepeatInfo> all = server.controller.getAllRepeats();
+        check(all.size() == 3, "getAllRepeats should include rules from all dialogs; got " + all.size());
+        check(all.get(0).dialogId == 30 && all.get(0).paused, "Paused rule should sort first in getAllRepeats");
+        check(all.get(1).dialogId == 10 && !all.get(1).paused, "Soonest active rule should sort before later active rule");
+        check(all.get(2).dialogId == 20 && !all.get(2).paused, "Later active rule should sort after earlier active rule");
+        check(all.get(1).nextDate > 0 && all.get(2).nextDate > all.get(1).nextDate, "nextDate should be populated and ordered");
     }
 
     static TLRPC.TL_messages_sendMessage text(long dialogId, int date, long randomId) {

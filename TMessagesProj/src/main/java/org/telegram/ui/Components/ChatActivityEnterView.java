@@ -133,6 +133,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.MoagramConfig;
 import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
@@ -11171,7 +11172,8 @@ public class ChatActivityEnterView extends FrameLayout implements
                     userInfo.disallowed_stargifts.disallow_unique_stargifts
                 )
             ) &&
-            parentFragment != null && parentFragment.getChatMode() == 0;
+            parentFragment != null && parentFragment.getChatMode() == 0 &&
+            !MoagramConfig.isHideGiftButton();
 
         if (!visible && birthdayHint != null) {
             birthdayHint.hide();
@@ -12539,7 +12541,15 @@ public class ChatActivityEnterView extends FrameLayout implements
                             }
                         };
                         if (!showConfirmAlert(runnable)) {
-                            runnable.run();
+                            if (MoagramConfig.isConfirmGifs()) {
+                                MoagramConfig.showConfirmDialog(parentActivity, resourcesProvider,
+                                        LocaleController.getString(R.string.MoagramUxConfirmGifTitle),
+                                        LocaleController.getString(R.string.MoagramUxConfirmGifMessage),
+                                        LocaleController.getString(R.string.Send),
+                                        runnable);
+                            } else {
+                                runnable.run();
+                            }
                         }
                     });
                 }
@@ -12813,7 +12823,15 @@ public class ChatActivityEnterView extends FrameLayout implements
                     MediaDataController.getInstance(currentAccount).addRecentSticker(MediaDataController.TYPE_IMAGE, parent, sticker, (int) (System.currentTimeMillis() / 1000), false);
                 };
                 if (!showConfirmAlert(runnable)) {
-                    runnable.run();
+                    if (MoagramConfig.isConfirmStickers()) {
+                        MoagramConfig.showConfirmDialog(parentActivity, resourcesProvider,
+                                LocaleController.getString(R.string.MoagramUxConfirmStickerTitle),
+                                LocaleController.getString(R.string.MoagramUxConfirmStickerMessage),
+                                LocaleController.getString(R.string.Send),
+                                runnable);
+                    } else {
+                        runnable.run();
+                    }
                 }
             });
         }

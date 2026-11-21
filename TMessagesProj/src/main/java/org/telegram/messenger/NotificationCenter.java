@@ -387,6 +387,7 @@ public class NotificationCenter {
     public static final int communitySwitchedCollapsed = totalEvents++;
 
     public static final int ghostModeChanged = totalEvents++;
+    public static final int moagramConfigChanged = totalEvents++;
 
     public static boolean alreadyLogged;
 

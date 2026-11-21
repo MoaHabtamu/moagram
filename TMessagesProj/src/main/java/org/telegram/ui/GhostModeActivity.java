@@ -14,17 +14,12 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import android.content.DialogInterface;
-import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.GhostModeController;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
-import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.R;
-import org.telegram.messenger.SharedConfig;
 import org.telegram.messenger.UserConfig;
 import org.telegram.ui.ActionBar.ActionBar;
-import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BackDrawable;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
@@ -33,7 +28,6 @@ import org.telegram.ui.Cells.ShadowSectionCell;
 import org.telegram.ui.Cells.TextCheckCell;
 import org.telegram.ui.Cells.TextInfoPrivacyCell;
 import org.telegram.ui.Cells.TextSettingsCell;
-import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.RecyclerListView;
 
@@ -52,15 +46,9 @@ public class GhostModeActivity extends BaseFragment {
     private int ghostReadRow;
     private int markOnReplyRow;
     private int hideStoriesRow;
-    private int cacheStoryViewersRow;
-    private int clearStoryViewsCacheRow;
-    private int saveRestrictedContentRow;
-    private int bypassChannelRestrictionsRow;
-    private int saveDeletedMessagesRow;
-    private int saveDeletedMediaRow;
-    private int saveEditHistoryRow;
-    private int saveSelfDestructingMediaRow;
     private int noticeSectionRow;
+    private int localHistoryRow;
+    private int localHistoryDetailRow;
     private int noticeDetailRow;
 
     private final static int TYPE_CHECK = 0;
@@ -95,15 +83,9 @@ public class GhostModeActivity extends BaseFragment {
         ghostReadRow = rowCount++;
         markOnReplyRow = rowCount++;
         hideStoriesRow = rowCount++;
-        cacheStoryViewersRow = rowCount++;
-        clearStoryViewsCacheRow = rowCount++;
-        saveRestrictedContentRow = rowCount++;
-        bypassChannelRestrictionsRow = rowCount++;
-        saveDeletedMessagesRow = rowCount++;
-        saveDeletedMediaRow = rowCount++;
-        saveEditHistoryRow = rowCount++;
-        saveSelfDestructingMediaRow = rowCount++;
         noticeSectionRow = rowCount++;
+        localHistoryRow = rowCount++;
+        localHistoryDetailRow = rowCount++;
         noticeDetailRow = rowCount++;
     }
 
@@ -142,6 +124,8 @@ public class GhostModeActivity extends BaseFragment {
                     MessagesController.getInstance(currentAccount).sendOfflineStatus();
                 }
                 listAdapter.notifyDataSetChanged();
+            } else if (position == localHistoryRow) {
+                presentFragment(new LocalHistoryActivity(currentAccount));
             } else if (!ghostMode.enabled) {
                 return;
             } else if (position == hideOnlineRow) {
@@ -187,65 +171,6 @@ public class GhostModeActivity extends BaseFragment {
                 if (view instanceof TextCheckCell) {
                     ((TextCheckCell) view).setChecked(ghostMode.hideStories);
                 }
-            } else if (position == cacheStoryViewersRow) {
-                SharedConfig.setCacheStoryViewers(!SharedConfig.cacheStoryViewers);
-                if (view instanceof TextCheckCell) {
-                    ((TextCheckCell) view).setChecked(SharedConfig.cacheStoryViewers);
-                }
-            } else if (position == clearStoryViewsCacheRow) {
-                if (getParentActivity() == null) {
-                    return;
-                }
-                AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
-                builder.setTitle(LocaleController.getString(R.string.ClearStoryViewsCache));
-                builder.setMessage(LocaleController.getString(R.string.ClearStoryViewsCacheConfirm));
-                builder.setPositiveButton(LocaleController.getString(R.string.ClearButton), (dialog, which) -> {
-                    MessagesStorage.getInstance(currentAccount).clearAllStoryViewsCache(() -> {
-                        BulletinFactory.of(GhostModeActivity.this).createSimpleBulletin(R.raw.ic_delete, LocaleController.getString(R.string.StoryViewsCacheCleared)).show();
-                    });
-                });
-                builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
-                AlertDialog dialog = builder.create();
-                showDialog(dialog);
-                android.widget.TextView button = (android.widget.TextView) dialog.getButton(DialogInterface.BUTTON_POSITIVE);
-                if (button != null) {
-                    button.setTextColor(Theme.getColor(Theme.key_text_RedBold));
-                }
-            } else if (position == saveRestrictedContentRow) {
-                SharedConfig.allowSaveRestrictedMedia = !SharedConfig.allowSaveRestrictedMedia;
-                SharedConfig.saveConfig();
-                if (view instanceof TextCheckCell) {
-                    ((TextCheckCell) view).setChecked(SharedConfig.allowSaveRestrictedMedia);
-                }
-            } else if (position == bypassChannelRestrictionsRow) {
-                SharedConfig.setIgnoreAllRestrictions(!SharedConfig.ignoreAllRestrictions);
-                if (view instanceof TextCheckCell) {
-                    ((TextCheckCell) view).setChecked(SharedConfig.ignoreAllRestrictions);
-                }
-            } else if (position == saveDeletedMessagesRow) {
-                SharedConfig.setSaveDeletedMessages(!SharedConfig.saveDeletedMessages);
-                if (view instanceof TextCheckCell) {
-                    ((TextCheckCell) view).setChecked(SharedConfig.saveDeletedMessages);
-                }
-                listAdapter.notifyItemChanged(saveDeletedMediaRow);
-            } else if (position == saveDeletedMediaRow) {
-                if (!SharedConfig.saveDeletedMessages) {
-                    return;
-                }
-                SharedConfig.setSaveDeletedMedia(!SharedConfig.saveDeletedMedia);
-                if (view instanceof TextCheckCell) {
-                    ((TextCheckCell) view).setChecked(SharedConfig.saveDeletedMedia);
-                }
-            } else if (position == saveEditHistoryRow) {
-                SharedConfig.setSaveEditHistory(!SharedConfig.saveEditHistory);
-                if (view instanceof TextCheckCell) {
-                    ((TextCheckCell) view).setChecked(SharedConfig.saveEditHistory);
-                }
-            } else if (position == saveSelfDestructingMediaRow) {
-                SharedConfig.setKeepSelfDestructingMedia(!SharedConfig.keepSelfDestructingMedia);
-                if (view instanceof TextCheckCell) {
-                    ((TextCheckCell) view).setChecked(SharedConfig.keepSelfDestructingMedia);
-                }
             }
         });
 
@@ -276,11 +201,8 @@ public class GhostModeActivity extends BaseFragment {
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
             int position = holder.getAdapterPosition();
-            if (position == masterRow || position == cacheStoryViewersRow || position == clearStoryViewsCacheRow || position == saveRestrictedContentRow || position == bypassChannelRestrictionsRow || position == saveDeletedMessagesRow || position == saveEditHistoryRow || position == saveSelfDestructingMediaRow) {
+            if (position == masterRow || position == localHistoryRow) {
                 return true;
-            }
-            if (position == saveDeletedMediaRow) {
-                return SharedConfig.saveDeletedMessages;
             }
             GhostModeController ghostMode = GhostModeController.getInstance(currentAccount);
             if (!ghostMode.enabled) {
@@ -387,85 +309,24 @@ public class GhostModeActivity extends BaseFragment {
                                 LocaleController.getString(R.string.GhostModeStoriesInfo),
                                 ghostMode.hideStories,
                                 true,
-                                true
-                        );
-                        checkCell.setEnabled(enabled, null);
-                    } else if (position == cacheStoryViewersRow) {
-                        checkCell.setTextAndValueAndCheck(
-                                LocaleController.getString(R.string.CacheStoryViewers),
-                                LocaleController.getString(R.string.CacheStoryViewersInfo),
-                                SharedConfig.cacheStoryViewers,
-                                true,
-                                true
-                        );
-                        checkCell.setEnabled(true, null);
-                    } else if (position == saveRestrictedContentRow) {
-                        checkCell.setTextAndValueAndCheck(
-                                LocaleController.getString(R.string.SaveRestrictedContent),
-                                LocaleController.getString(R.string.SaveRestrictedContentInfo),
-                                SharedConfig.allowSaveRestrictedMedia,
-                                true,
-                                true
-                        );
-                        checkCell.setEnabled(true, null);
-                    } else if (position == bypassChannelRestrictionsRow) {
-                        checkCell.setTextAndValueAndCheck(
-                                LocaleController.getString(R.string.BypassChannelRestrictions),
-                                LocaleController.getString(R.string.BypassChannelRestrictionsInfo),
-                                SharedConfig.ignoreAllRestrictions,
-                                true,
-                                true
-                        );
-                        checkCell.setEnabled(true, null);
-                    } else if (position == saveDeletedMessagesRow) {
-                        checkCell.setTextAndValueAndCheck(
-                                LocaleController.getString(R.string.SaveDeletedMessages),
-                                LocaleController.getString(R.string.SaveDeletedMessagesInfo),
-                                SharedConfig.saveDeletedMessages,
-                                true,
-                                true
-                        );
-                        checkCell.setEnabled(true, null);
-                    } else if (position == saveDeletedMediaRow) {
-                        checkCell.setTextAndValueAndCheck(
-                                LocaleController.getString(R.string.SaveDeletedMedia),
-                                LocaleController.getString(R.string.SaveDeletedMediaInfo),
-                                SharedConfig.saveDeletedMedia,
-                                true,
-                                true
-                        );
-                        checkCell.setEnabled(SharedConfig.saveDeletedMessages, null);
-                    } else if (position == saveEditHistoryRow) {
-                        checkCell.setTextAndValueAndCheck(
-                                LocaleController.getString(R.string.SaveEditHistory),
-                                LocaleController.getString(R.string.SaveEditHistoryInfo),
-                                SharedConfig.saveEditHistory,
-                                true,
-                                true
-                        );
-                        checkCell.setEnabled(true, null);
-                    } else if (position == saveSelfDestructingMediaRow) {
-                        checkCell.setTextAndValueAndCheck(
-                                LocaleController.getString(R.string.SaveSelfDestructingMedia),
-                                LocaleController.getString(R.string.SaveSelfDestructingMediaInfo),
-                                SharedConfig.keepSelfDestructingMedia,
-                                true,
                                 false
                         );
-                        checkCell.setEnabled(true, null);
+                        checkCell.setEnabled(enabled, null);
                     }
                     break;
                 case TYPE_SETTINGS:
                     TextSettingsCell settingsCell = (TextSettingsCell) holder.itemView;
-                    if (position == clearStoryViewsCacheRow) {
-                        settingsCell.setText(LocaleController.getString(R.string.ClearStoryViewsCache), true);
-                        settingsCell.setTextColor(Theme.getColor(Theme.key_text_RedRegular));
+                    if (position == localHistoryRow) {
+                        settingsCell.setText(LocaleController.getString(R.string.GhostModeLocalHistoryLink), false);
+                        settingsCell.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlueText4));
                     }
                     break;
                 case TYPE_INFO:
                     TextInfoPrivacyCell infoCell = (TextInfoPrivacyCell) holder.itemView;
                     if (position == masterDetailRow) {
                         infoCell.setText(LocaleController.getString(R.string.GhostModeEnableInfo));
+                    } else if (position == localHistoryDetailRow) {
+                        infoCell.setText(LocaleController.getString(R.string.GhostModeLocalHistoryLinkInfo));
                     } else if (position == noticeDetailRow) {
                         infoCell.setText(LocaleController.getString(R.string.GhostModeNotice));
                     }
@@ -481,11 +342,11 @@ public class GhostModeActivity extends BaseFragment {
 
         @Override
         public int getItemViewType(int position) {
-            if (position == masterRow || position == hideOnlineRow || position == stealthSendRow || position == hideTypingRow || position == ghostReadRow || position == markOnReplyRow || position == hideStoriesRow || position == cacheStoryViewersRow || position == saveRestrictedContentRow || position == bypassChannelRestrictionsRow || position == saveDeletedMessagesRow || position == saveDeletedMediaRow || position == saveEditHistoryRow || position == saveSelfDestructingMediaRow) {
+            if (position == masterRow || position == hideOnlineRow || position == stealthSendRow || position == hideTypingRow || position == ghostReadRow || position == markOnReplyRow || position == hideStoriesRow) {
                 return TYPE_CHECK;
-            } else if (position == clearStoryViewsCacheRow) {
+            } else if (position == localHistoryRow) {
                 return TYPE_SETTINGS;
-            } else if (position == masterDetailRow || position == noticeDetailRow) {
+            } else if (position == masterDetailRow || position == localHistoryDetailRow || position == noticeDetailRow) {
                 return TYPE_INFO;
             } else if (position == featuresHeaderRow) {
                 return TYPE_HEADER;
