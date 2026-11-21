@@ -302,7 +302,7 @@ public class FileLoadOperation {
         boolean boost = MoagramConfig.isDownloadSpeedBoost() && !UserConfig.getInstance(currentAccount).isPremium();
         if (boost && !forceSmallChunk) {
             downloadChunkSize = 1024 * 128;
-            downloadChunkSizeBig = 1024 * 256;
+            downloadChunkSizeBig = 1024 * 512;
             bigFileSizeFrom = 1024 * 1024;
             maxDownloadRequests = 8;
             maxDownloadRequestsBig = 16;
@@ -866,9 +866,9 @@ public class FileLoadOperation {
     private void updateDownloadByteBudget() {
         boolean premium = UserConfig.getInstance(currentAccount).isPremium();
         if (!premium && MoagramConfig.isDownloadSpeedBoost() && !forceSmallChunk && !isStory) {
-            // Use tgnet's count-based scheduler across 4 sockets with 256 KB pipelined chunks.
+            // Use tgnet's count-based scheduler across 8 sockets with 512 KB pipelined chunks.
             useDownloadByteBudget = false;
-            downloadConnectionsCount = 4;
+            downloadConnectionsCount = ConnectionsManager.DownloadConnectionsCount;
             return;
         }
         useDownloadByteBudget = !MessagesController.getInstance(currentAccount).downloadImprovementKillswitch &&

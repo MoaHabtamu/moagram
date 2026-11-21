@@ -42,7 +42,7 @@ Open **Settings → Moagram Settings → Interface & Confirmations** to configur
 - **Accidental-action guards:** Confirm before starting voice/video calls, sending stickers, or sending GIFs.
 - **Chat list & compose:** Show or hide the Ghost Mode header quick-toggle, hide the Stories bar, hide the Gift button in the message input bar, and disable pulling up at the bottom of a channel to jump to the next unread channel.
 - **Messages & profiles:** Show exact seconds on message timestamps and show copyable numeric IDs on user, group, and channel profiles.
-- **Media & downloads:** **Download Speed Boost** (enabled by default for free accounts) uses 4 parallel download connections with 256 KB pipelined chunks (`128 KB` for small files) instead of Telegram's default 2-connection / 2 MB byte-budget throttle. Turn it off if your network or account hits rate limits.
+- **Media & downloads:** **Download Speed Boost** (enabled by default for free accounts) uses 8 parallel download connections with 512 KB pipelined chunks (`128 KB` for small files) instead of Telegram's default 2-connection / 2 MB byte-budget throttle, improving throughput especially on distant datacenters and lossy mobile networks. Turn it off if your network or account hits rate limits.
 
 **Settings → Moagram Settings** also shows a **Background & Delivery Health** section reporting Android battery optimization exemption, system notification permission, and Keep-Alive status, with one-tap shortcuts to the relevant system settings.
 

@@ -26,7 +26,7 @@ The development source is based on Telegram **13.2.2** and requires **Android 6.
 | **Ghost Mode** | Configure online-presence, typing, read-receipt, and story-view behavior per account, with a header quick-toggle button and per-chat **Mark as Read Now** action. |
 | **Hidden chats** | Hide selected chats from the normal list and configure opening triggers, passcode protection, and notifications in a dedicated settings screen. |
 | **Local history & media** | Dedicated app-wide settings for retaining received deleted messages, deleted media, message edit history, self-destructing media, cached story viewers, and content saving. |
-| **Interface & confirmations** | Optional accidental-action guards (confirm calls, stickers, GIFs), hide Stories bar or Gift button, disable next-channel pull, show seconds in timestamps, show copyable User/Chat IDs on profiles, and toggle **Download Speed Boost** (4 parallel connections with 256 KB pipelined chunks). |
+| **Interface & confirmations** | Optional accidental-action guards (confirm calls, stickers, GIFs), hide Stories bar or Gift button, disable next-channel pull, show seconds in timestamps, show copyable User/Chat IDs on profiles, and toggle **Download Speed Boost** (8 parallel connections with 512 KB pipelined chunks). |
 | **Background health** | One-tap visibility into Android battery optimization, notification permission, and Keep-Alive status. |
 
 Read the [feature guide](docs/FEATURES.md) for behavior and limits. Client-side privacy controls are not a guarantee of anonymity; Telegram servers and other clients can still observe account activity.
