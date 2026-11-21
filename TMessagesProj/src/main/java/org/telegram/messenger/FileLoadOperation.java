@@ -163,12 +163,12 @@ public class FileLoadOperation {
     private final static int stateCanceled = 4;
     private final static int stateCancelling = 5;
 
-    private int downloadChunkSize = 1024 * 128;
-    private int downloadChunkSizeBig = 1024 * 1024;
+    private int downloadChunkSize = 1024 * 32;
+    private int downloadChunkSizeBig = 1024 * 128;
     private int cdnChunkCheckSize = 1024 * 128;
-    private int maxDownloadRequests = 8;
-    private int maxDownloadRequestsBig = 12;
-    private int bigFileSizeFrom = 1024 * 1024;
+    private int maxDownloadRequests = 4;
+    private int maxDownloadRequestsBig = 4;
+    private int bigFileSizeFrom = 10 * 1024 * 1024;
     private int maxCdnParts = (int) (FileLoader.DEFAULT_MAX_FILE_SIZE / downloadChunkSizeBig);
 
     //load small parts for stream
@@ -299,12 +299,23 @@ public class FileLoadOperation {
     }
 
     private void updateParams() {
-        if (!forceSmallChunk) {
-            downloadChunkSizeBig = 1024 * 1024;
+        boolean boost = MoagramConfig.isDownloadSpeedBoost() && !UserConfig.getInstance(currentAccount).isPremium();
+        if (boost && !forceSmallChunk) {
+            downloadChunkSize = 1024 * 128;
+            downloadChunkSizeBig = 1024 * 256;
+            bigFileSizeFrom = 1024 * 1024;
             maxDownloadRequests = 8;
-            maxDownloadRequestsBig = 12;
+            maxDownloadRequestsBig = 16;
+        } else if ((preloadPrefixSize > 0 || MessagesController.getInstance(currentAccount).getfileExperimentalParams) && !forceSmallChunk) {
+            downloadChunkSize = 1024 * 32;
+            downloadChunkSizeBig = 1024 * 512;
+            bigFileSizeFrom = 10 * 1024 * 1024;
+            maxDownloadRequests = 8;
+            maxDownloadRequestsBig = 8;
         } else {
+            downloadChunkSize = 1024 * 32;
             downloadChunkSizeBig = 1024 * 128;
+            bigFileSizeFrom = 10 * 1024 * 1024;
             maxDownloadRequests = 4;
             maxDownloadRequestsBig = 4;
         }
@@ -853,13 +864,21 @@ public class FileLoadOperation {
     // Snapshot the policy for this operation, including its connection pool.
     // Streams use it too, like TDLib, which shares one downloader between streaming and downloads.
     private void updateDownloadByteBudget() {
+        boolean premium = UserConfig.getInstance(currentAccount).isPremium();
+        if (!premium && MoagramConfig.isDownloadSpeedBoost() && !forceSmallChunk && !isStory) {
+            // Use tgnet's count-based scheduler across 4 sockets with 256 KB pipelined chunks.
+            useDownloadByteBudget = false;
+            downloadConnectionsCount = 4;
+            return;
+        }
         useDownloadByteBudget = !MessagesController.getInstance(currentAccount).downloadImprovementKillswitch &&
                 totalBytesCount > 0 && key == null && !encryptFile && !isPreloadVideoOperation && preloadPrefixSize == 0;
         if (useDownloadByteBudget) {
-            boolean premium = UserConfig.getInstance(currentAccount).isPremium();
             downloadConnectionsCount = premium ? ConnectionsManager.DownloadConnectionsCount : 2;
             int byteBudget = (premium ? 16 : 2) * 1024 * 1024;
             currentMaxDownloadRequests = byteBudget / currentDownloadChunkSize;
+        } else {
+            downloadConnectionsCount = 2;
         }
     }
 

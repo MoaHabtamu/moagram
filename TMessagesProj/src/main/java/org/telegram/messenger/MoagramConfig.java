@@ -25,6 +25,7 @@ public final class MoagramConfig {
     private static volatile boolean loaded;
 
     public static volatile boolean showGhostModeButton = true;
+    public static volatile boolean downloadSpeedBoost = true;
     public static volatile boolean confirmCalls = false;
     public static volatile boolean confirmStickers = false;
     public static volatile boolean confirmGifs = false;
@@ -50,6 +51,7 @@ public final class MoagramConfig {
             }
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
             showGhostModeButton = prefs.getBoolean("showGhostModeButton", true);
+            downloadSpeedBoost = prefs.getBoolean("downloadSpeedBoost", true);
             confirmCalls = prefs.getBoolean("confirmCalls", false);
             confirmStickers = prefs.getBoolean("confirmStickers", false);
             confirmGifs = prefs.getBoolean("confirmGifs", false);
@@ -66,6 +68,7 @@ public final class MoagramConfig {
         synchronized (LOCK) {
             loaded = false;
             showGhostModeButton = true;
+            downloadSpeedBoost = true;
             confirmCalls = false;
             confirmStickers = false;
             confirmGifs = false;
@@ -100,6 +103,20 @@ public final class MoagramConfig {
         }
         showGhostModeButton = value;
         saveAndNotify("showGhostModeButton", value);
+    }
+
+    public static boolean isDownloadSpeedBoost() {
+        ensureLoaded();
+        return downloadSpeedBoost;
+    }
+
+    public static void setDownloadSpeedBoost(boolean value) {
+        ensureLoaded();
+        if (downloadSpeedBoost == value) {
+            return;
+        }
+        downloadSpeedBoost = value;
+        saveAndNotify("downloadSpeedBoost", value);
     }
 
     public static boolean isConfirmCalls() {
@@ -218,6 +235,7 @@ public final class MoagramConfig {
         ensureLoaded();
         int count = 0;
         if (showGhostModeButton) count++;
+        if (downloadSpeedBoost) count++;
         if (confirmCalls) count++;
         if (confirmStickers) count++;
         if (confirmGifs) count++;

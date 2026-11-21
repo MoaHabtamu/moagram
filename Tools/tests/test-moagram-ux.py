@@ -15,6 +15,7 @@ for name in (
     'MoagramSettings', 'MoagramSettingsSubtitle', 'MoagramUxTitle',
     'LocalHistoryTitle', 'HiddenChatsTitle', 'GlobalRepeatsTitle',
     'BackgroundHealthHeader', 'GhostModeMarkReadNow', 'MoagramProfileIdLabel',
+    'MoagramUxDownloadsHeader', 'MoagramUxDownloadBoost', 'MoagramUxDownloadBoostInfo',
 ):
     assert name in defined_moagram_strings, f'Missing string {name} in moagram.xml'
 
@@ -22,6 +23,15 @@ for name in (
 ghost_src = (java_root / 'ui/GhostModeActivity.java').read_text()
 assert ghost_src.index('position == localHistoryRow') < ghost_src.index('else if (!ghostMode.enabled)'), (
     'LocalHistoryActivity row must remain clickable when Ghost Mode is disabled'
+)
+
+# 2b. Verify FileLoadOperation does not hardcode 1 MB chunks that stall under Telegram 13.x's 2 MB budget.
+file_load_src = (java_root / 'messenger/FileLoadOperation.java').read_text()
+assert 'downloadChunkSizeBig = 1024 * 1024' not in file_load_src, (
+    'FileLoadOperation must not hardcode 1 MB chunks (stalls pipelining under 2 MB byte budget)'
+)
+assert 'MoagramConfig.isDownloadSpeedBoost()' in file_load_src, (
+    'FileLoadOperation must gate Download Speed Boost on MoagramConfig.isDownloadSpeedBoost()'
 )
 
 # 3. Compile and execute production MoagramConfig against recording Android doubles.
@@ -108,6 +118,7 @@ public class MoagramUxTest {
     public static void main(String[] args) {
         MoagramConfig.resetForTests();
         check(MoagramConfig.isShowGhostModeButton(), "Ghost Mode quick button defaults to true");
+        check(MoagramConfig.isDownloadSpeedBoost(), "downloadSpeedBoost defaults to true");
         check(!MoagramConfig.isConfirmCalls(), "confirmCalls defaults to false");
         check(!MoagramConfig.isConfirmStickers(), "confirmStickers defaults to false");
         check(!MoagramConfig.isConfirmGifs(), "confirmGifs defaults to false");
@@ -116,7 +127,7 @@ public class MoagramUxTest {
         check(!MoagramConfig.isDisableNextChannelJump(), "disableNextChannelJump defaults to false");
         check(!MoagramConfig.isShowSecondsInTimestamps(), "showSecondsInTimestamps defaults to false");
         check(!MoagramConfig.isShowProfileIds(), "showProfileIds defaults to false");
-        check(MoagramConfig.getEnabledUxModCount() == 1, "default enabled UX count is 1 (ghost button)");
+        check(MoagramConfig.getEnabledUxModCount() == 2, "default enabled UX count is 2 (ghost button + download boost)");
 
         int before = NotificationCenter.getGlobalInstance().posts;
         MoagramConfig.setConfirmCalls(false);
@@ -131,12 +142,14 @@ public class MoagramUxTest {
         MoagramConfig.setShowSecondsInTimestamps(true);
         MoagramConfig.setShowProfileIds(true);
         MoagramConfig.setShowGhostModeButton(false);
-        check(NotificationCenter.getGlobalInstance().posts == before + 9, "each changed toggle emits moagramConfigChanged");
+        MoagramConfig.setDownloadSpeedBoost(false);
+        check(NotificationCenter.getGlobalInstance().posts == before + 10, "each changed toggle emits moagramConfigChanged");
         check(MoagramConfig.getEnabledUxModCount() == 8, "enabled UX count tracks active toggles");
 
         // Reload from SharedPreferences to verify persistence.
         MoagramConfig.resetForTests();
         check(!MoagramConfig.isShowGhostModeButton(), "showGhostModeButton persists false");
+        check(!MoagramConfig.isDownloadSpeedBoost(), "downloadSpeedBoost persists false");
         check(MoagramConfig.isConfirmCalls(), "confirmCalls persists true");
         check(MoagramConfig.isConfirmStickers(), "confirmStickers persists true");
         check(MoagramConfig.isConfirmGifs(), "confirmGifs persists true");

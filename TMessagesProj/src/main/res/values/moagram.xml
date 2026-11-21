@@ -228,6 +228,9 @@
     <string name="MoagramUxShowSecondsInfo">Display exact seconds alongside hours and minutes on message timestamps.</string>
     <string name="MoagramUxShowProfileIds">Show IDs on Profiles</string>
     <string name="MoagramUxShowProfileIdsInfo">Display the numeric Telegram ID on user, group, and channel profiles. Tap to copy.</string>
+    <string name="MoagramUxDownloadsHeader">Media &amp; Downloads</string>
+    <string name="MoagramUxDownloadBoost">Download Speed Boost</string>
+    <string name="MoagramUxDownloadBoostInfo">Use 4 parallel connections with 256 KB pipelined chunks for smoother, faster file downloads on free accounts. Turn off if downloads hit rate limits.</string>
     <string name="MoagramProfileIdLabel">ID</string>
     <string name="MoagramProfileIdCopied">ID copied to clipboard</string>
 </resources>

@@ -43,6 +43,9 @@ public class MoagramUxActivity extends BaseFragment {
     private int detailsHeaderRow;
     private int showSecondsRow;
     private int showProfileIdsRow;
+    private int detailsShadowRow;
+    private int downloadsHeaderRow;
+    private int downloadBoostRow;
     private int endShadowRow;
 
     private static final int TYPE_CHECK = 0;
@@ -73,6 +76,9 @@ public class MoagramUxActivity extends BaseFragment {
         detailsHeaderRow = rowCount++;
         showSecondsRow = rowCount++;
         showProfileIdsRow = rowCount++;
+        detailsShadowRow = rowCount++;
+        downloadsHeaderRow = rowCount++;
+        downloadBoostRow = rowCount++;
         endShadowRow = rowCount++;
     }
 
@@ -140,6 +146,10 @@ public class MoagramUxActivity extends BaseFragment {
             } else if (position == showProfileIdsRow) {
                 boolean next = !MoagramConfig.isShowProfileIds();
                 MoagramConfig.setShowProfileIds(next);
+                cell.setChecked(next);
+            } else if (position == downloadBoostRow) {
+                boolean next = !MoagramConfig.isDownloadSpeedBoost();
+                MoagramConfig.setDownloadSpeedBoost(next);
                 cell.setChecked(next);
             }
         });
@@ -243,6 +253,11 @@ public class MoagramUxActivity extends BaseFragment {
                                 LocaleController.getString(R.string.MoagramUxShowProfileIds),
                                 LocaleController.getString(R.string.MoagramUxShowProfileIdsInfo),
                                 MoagramConfig.isShowProfileIds(), true, false);
+                    } else if (position == downloadBoostRow) {
+                        cell.setTextAndValueAndCheck(
+                                LocaleController.getString(R.string.MoagramUxDownloadBoost),
+                                LocaleController.getString(R.string.MoagramUxDownloadBoostInfo),
+                                MoagramConfig.isDownloadSpeedBoost(), true, false);
                     }
                     break;
                 }
@@ -254,6 +269,8 @@ public class MoagramUxActivity extends BaseFragment {
                         header.setText(LocaleController.getString(R.string.MoagramUxInterfaceHeader));
                     } else if (position == detailsHeaderRow) {
                         header.setText(LocaleController.getString(R.string.MoagramUxDetailsHeader));
+                    } else if (position == downloadsHeaderRow) {
+                        header.setText(LocaleController.getString(R.string.MoagramUxDownloadsHeader));
                     }
                     break;
                 }
@@ -262,10 +279,12 @@ public class MoagramUxActivity extends BaseFragment {
 
         @Override
         public int getItemViewType(int position) {
-            if (position == confirmationsHeaderRow || position == interfaceHeaderRow || position == detailsHeaderRow) {
+            if (position == confirmationsHeaderRow || position == interfaceHeaderRow
+                    || position == detailsHeaderRow || position == downloadsHeaderRow) {
                 return TYPE_HEADER;
             }
-            if (position == confirmationsShadowRow || position == interfaceShadowRow || position == endShadowRow) {
+            if (position == confirmationsShadowRow || position == interfaceShadowRow
+                    || position == detailsShadowRow || position == endShadowRow) {
                 return TYPE_SHADOW;
             }
             return TYPE_CHECK;
