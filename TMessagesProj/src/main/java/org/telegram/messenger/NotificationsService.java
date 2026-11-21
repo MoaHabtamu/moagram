@@ -32,22 +32,11 @@ public class NotificationsService extends Service {
     private static final String CHANNEL_ID = "moagram_keep_alive_service";
     private static final int NOTIFICATION_ID = 723699;
     private static final int ALARM_REQUEST_CODE = 723699;
-    private static final long HEARTBEAT_INTERVAL_MS = 3 * 60 * 1000L;
+    // Used only when no foreground service is running to recover the process.
+    private static final long RECOVERY_ALARM_INTERVAL_MS = 15 * 60 * 1000L;
 
     private boolean foregroundStarted;
-
-    private final Runnable heartbeatRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (!isKeepAliveEnabled()) {
-                cancelWakeupAlarm(NotificationsService.this);
-                stopSelf();
-                return;
-            }
-            ensurePushConnectionsAlive(false);
-            AndroidUtilities.runOnUIThread(this, HEARTBEAT_INTERVAL_MS);
-        }
-    };
+    private boolean localizedForeground;
 
     @Override
     public void onCreate() {
@@ -65,20 +54,20 @@ public class NotificationsService extends Service {
             return START_NOT_STICKY;
         }
         ApplicationLoader.postInitApplication();
-        if (foregroundStarted) {
+        if (foregroundStarted && !localizedForeground) {
             foregroundStarted = startForegroundCompat(true);
+            localizedForeground = foregroundStarted;
         }
         if (!foregroundStarted) {
             onPushServiceTick(true, true);
             stopSelf();
             return START_NOT_STICKY;
         }
-        // Android owns restarting this sticky foreground service. Only use an
-        // alarm when there is no service to protect the process.
+        // Android owns restarting this sticky foreground service, and tgnet's
+        // native push socket stays alive while networkPaused is true. Do not
+        // run a periodic Java wakeup loop or call resumeNetworkMaybe() here.
         cancelWakeupAlarm(this);
         ensurePushConnectionsAlive(false);
-        AndroidUtilities.cancelRunOnUIThread(heartbeatRunnable);
-        AndroidUtilities.runOnUIThread(heartbeatRunnable, HEARTBEAT_INTERVAL_MS);
         return START_STICKY;
     }
 
@@ -91,7 +80,7 @@ public class NotificationsService extends Service {
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
         if (isKeepAliveEnabled()) {
-            scheduleWakeupAlarm(this, HEARTBEAT_INTERVAL_MS);
+            scheduleWakeupAlarm(this, RECOVERY_ALARM_INTERVAL_MS);
         }
     }
 
@@ -108,10 +97,10 @@ public class NotificationsService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        AndroidUtilities.cancelRunOnUIThread(heartbeatRunnable);
+        localizedForeground = false;
         stopForeground(true);
         if (isKeepAliveEnabled()) {
-            scheduleWakeupAlarm(this, HEARTBEAT_INTERVAL_MS);
+            scheduleWakeupAlarm(this, RECOVERY_ALARM_INTERVAL_MS);
         } else {
             cancelWakeupAlarm(this);
         }
@@ -128,7 +117,7 @@ public class NotificationsService extends Service {
         ApplicationLoader.postInitApplication();
         ensurePushConnectionsAlive(fromBackgroundWakeup);
         if (context != null) {
-            scheduleWakeupAlarm(context, HEARTBEAT_INTERVAL_MS);
+            scheduleWakeupAlarm(context, RECOVERY_ALARM_INTERVAL_MS);
         }
     }
 
@@ -140,13 +129,14 @@ public class NotificationsService extends Service {
         return MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", true);
     }
 
-    private static void ensurePushConnectionsAlive(boolean startKeepAliveJob) {
+    private static void ensurePushConnectionsAlive(boolean wakeGenericNetwork) {
+        boolean startKeepAliveJob = wakeGenericNetwork;
         for (int a = 0; a < UserConfig.MAX_ACCOUNT_COUNT; a++) {
             if (UserConfig.getInstance(a).isClientActivated()) {
                 ConnectionsManager cm = ConnectionsManager.getInstance(a);
                 boolean pushEnabled = cm.isPushConnectionEnabled();
                 cm.setPushConnectionEnabled(pushEnabled);
-                if (pushEnabled) {
+                if (pushEnabled && wakeGenericNetwork) {
                     if (startKeepAliveJob) {
                         KeepAliveJob.startJob();
                         startKeepAliveJob = false;

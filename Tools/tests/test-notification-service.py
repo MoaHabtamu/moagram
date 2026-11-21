@@ -258,16 +258,16 @@ public class NotificationServiceTest {
             check((service.notification.content.flags & PendingIntent.FLAG_IMMUTABLE)!=0,"immutable intent "+sdk);
             if(sdk>=26) check(manager.channel.sound==null && !manager.channel.vibration && !manager.channel.badge,"quiet channel "+sdk);
             check(service.onStartCommand(null,0,1)==Service.START_STICKY,"sticky null-intent restart "+sdk);
-            check(ConnectionsManager.accounts[0].resumes==1 && ConnectionsManager.accounts[1].resumes==1
-                && ConnectionsManager.accounts[2].resumes==0,"active accounts only "+sdk);
-            check(delayed.size()==1 && alarm.scheduled==0,"one heartbeat without recurring wakeup "+sdk);
+            check(ConnectionsManager.accounts[0].enabled && ConnectionsManager.accounts[1].enabled
+                && !ConnectionsManager.accounts[2].enabled,"push connection enabled for active accounts only "+sdk);
+            check(ConnectionsManager.accounts[0].resumes==0 && ConnectionsManager.accounts[0].checks==0,"foreground service does not wake generic network stack "+sdk);
+            check(delayed.isEmpty() && alarm.scheduled==0,"no periodic Java heartbeat or wakeup alarm while FGS runs "+sdk);
             service.onStartCommand(new Intent(),0,2);
-            check(delayed.size()==1,"repeated start does not duplicate heartbeat "+sdk);
-            Runnable heartbeat=delayed.keySet().iterator().next(); delayed.clear(); heartbeat.run();
-            check(ConnectionsManager.accounts[0].resumes==3 && delayed.size()==1,"heartbeat reconnects "+sdk);
+            check(service.promoted==2,"repeated start does not repost localized notification "+sdk);
+            check(delayed.isEmpty() && ConnectionsManager.accounts[0].resumes==0,"repeated start keeps network paused "+sdk);
             service.onTaskRemoved(new Intent());
             check(service.stopped==0 && broadcasts==0,"task removal leaves FGS running "+sdk);
-            check(alarm.at==181000 && alarm.pending.intent.target==AppStartReceiver.class,"bounded explicit recovery alarm "+sdk);
+            check(alarm.at==901000 && alarm.pending.intent.target==AppStartReceiver.class,"15-minute explicit recovery alarm "+sdk);
             service.onDestroy();
             check(delayed.isEmpty() && service.removed==1 && broadcasts==0,"destroy cleans up without restart loop "+sdk);
         }
@@ -293,8 +293,8 @@ public class NotificationServiceTest {
         NotificationsService active=new NotificationsService(); active.onCreate(); active.onStartCommand(null,0,1);
         check(ConnectionsManager.accounts[0].resumes==0 && !ConnectionsManager.accounts[0].enabled,"disabled connection stays disabled");
         MessagesController.global.values.put("pushService",false);
-        Runnable heartbeat=delayed.keySet().iterator().next(); delayed.clear(); heartbeat.run();
-        check(active.stopped==1 && delayed.isEmpty(),"disabling stops heartbeat");
+        ApplicationLoader.startPushService();
+        check(stops==1 && delayed.isEmpty(),"disabling stops service without background heartbeat");
         reset(); rejectStart=true;
         ApplicationLoader.startPushService();
         check(logs==1 && jobs==1 && init>0,"blocked FGS start logs and enqueues bounded job");
