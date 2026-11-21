@@ -468,6 +468,10 @@ public class ApplicationLoader extends Application {
                                             ConnectionsManager.getInstance(a).resumeNetworkMaybe();
                                         }
                                     }
+                                    ForegroundDetector detector = ForegroundDetector.getInstance();
+                                    if (detector != null && !detector.isBackground()) {
+                                        MoagramUsage.onForeground();
+                                    }
                                 });
                             }
 

@@ -148,3 +148,24 @@ test('version shares exclude dormant installs and escape reported version names'
     assert.doesNotMatch(html, /<script>|Dormant version/);
     assert.match(html, /<line[^>]+/); // Count scale remains present for nonempty data.
 });
+
+test('chunked POST without Content-Length succeeds, oversized bodies fail, and returning installs require 2+ UTC days', async t => {
+    const f = fixture(t);
+    const id = '12345678-1234-4123-8123-123456789def';
+    const body = JSON.stringify({ install_id: id, event: 'install', version_code: 9, version_name: 'Preview 9' });
+    const response = await f.fetch('/v1/event', { method: 'POST', body });
+    assert.equal(response.status, 204);
+
+    const tooLarge = await f.fetch('/v1/event', { method: 'POST', body: 'x'.repeat(1025) });
+    assert.equal(tooLarge.status, 400);
+
+    // Single-day install is not counted as returning yet.
+    assert.equal((await f.summary()).returning_installs, 0);
+
+    // Once seen on a second UTC day, it counts as a returning install and appears in the breakdown.
+    await seed(f.db, 'multi-day', NOW - 2 * DAY, NOW, [NOW - 2 * DAY, NOW], 9, 'Preview 9');
+    const totals = await f.summary();
+    assert.equal(totals.returning_installs, 1);
+    const html = await f.dashboard();
+    assert.match(html, /Returning \(2\+ UTC days\): <strong>1<\/strong>/);
+});

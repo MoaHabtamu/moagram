@@ -45,6 +45,7 @@ class UsageStoreTests(unittest.TestCase):
         summary = self.store.summary(self.now + 3 * 24 * 60 * 60 * 1000)
         self.assertEqual(summary['new_installs'], 1)
         self.assertEqual(summary['existing_installs'], 0)
+        self.assertEqual(summary['returning_installs'], 1)
         self.assertEqual(summary['update_events'], 1)
         self.assertEqual(summary['active_1d'], 1)
         self.assertEqual(summary['active_7d'], 1)
@@ -144,7 +145,7 @@ class UsageDecisionTests(unittest.TestCase):
             completed = subprocess.run(
                 ['java', '-cp', f'{temporary}:{classes}:{android}', 'MoagramUsageTest'],
                 check=True, text=True, capture_output=True)
-        self.assertIn('MoagramUsage: 24 checks passed', completed.stdout)
+        self.assertIn('MoagramUsage: 30 checks passed', completed.stdout)
 
     def test_cloudflare_worker(self):
         subprocess.run(['node', '--test', str(ROOT / 'Tools/tests/test-usage-worker.mjs')], check=True)

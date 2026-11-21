@@ -52,10 +52,13 @@ def github_releases():
     env.pop('GH_FORCE_TTY', None)
     env.pop('CLICOLOR_FORCE', None)
     completed = subprocess.run(
-        ['gh', 'api', '--paginate', 'repos/MoaHabtamu/moagram/releases'],
+        ['gh', 'api', '--paginate', '--slurp', 'repos/MoaHabtamu/moagram/releases'],
         check=True, text=True, capture_output=True, env=env)
     text = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', completed.stdout).strip()
-    return json.loads(text)
+    pages = json.loads(text)
+    if isinstance(pages, list) and pages and isinstance(pages[0], list):
+        return [item for page in pages for item in page]
+    return pages
 
 
 def print_github():
@@ -74,7 +77,7 @@ def print_github():
     print(f'  Release-file downloads: {release_downloads}')
     print(f'  Update-file downloads: {update_downloads}')
     if update_downloads == 0:
-        print('  Release-file downloads include people updating, until updates use a separate -update.apk file.')
+        print('  Release-file downloads include updates, retries, and automated crawlers/bots.')
 
 
 def private_settings():
@@ -145,7 +148,9 @@ def print_summary(summary):
     print(f"  Installs reporting in the last 24 hours: {summary.get('active_1d', 0)}")
     print(f"  Installs reporting in the last 7 days: {summary.get('active_7d', 0)}")
     print(f"  Installs reporting in the last 30 days: {summary.get('active_30d', 0)}")
-    print(f"  Installs that have reported: {heard}")
+    print(f"  Installs that have reported: {heard} (fresh: {int(summary.get('new_installs') or 0)}, existing: {int(summary.get('existing_installs') or 0)}, updates: {int(summary.get('update_events') or 0)})")
+    if 'returning_installs' in summary:
+        print(f"  Returning installs (2+ UTC days): {int(summary.get('returning_installs') or 0)}")
     active = summary.get('active_30d') or 0
     for version in summary.get('by_version') or []:
         count = version.get('active_30d') or 0

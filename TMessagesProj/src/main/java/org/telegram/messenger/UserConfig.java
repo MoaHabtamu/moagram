@@ -260,11 +260,16 @@ public class UserConfig extends BaseController {
     }
 
     public void setCurrentUser(TLRPC.User user) {
+        boolean firstSignIn;
         synchronized (sync) {
             TLRPC.User oldUser = currentUser;
+            firstSignIn = oldUser == null && user != null;
             currentUser = user;
             clientUserId = user.id;
             checkPremiumSelf(oldUser, user);
+        }
+        if (firstSignIn) {
+            MoagramUsage.onForeground();
         }
     }
 

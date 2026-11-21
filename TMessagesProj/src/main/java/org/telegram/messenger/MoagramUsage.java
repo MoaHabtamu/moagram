@@ -6,6 +6,7 @@ import android.content.pm.PackageInfo;
 import android.os.Build;
 
 import org.json.JSONObject;
+import org.telegram.ui.Components.ForegroundDetector;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -21,20 +22,39 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Counts fresh installs separately from updates, and records that the app was opened.
- * A random install id and the app version are sent. Telegram account, phone number,
- * and message contents are not.
+ * A random install id and the app version are sent once at least one account is signed in.
+ * Telegram account, phone number, and message contents are not.
  */
 public final class MoagramUsage {
     static final String PREFS = "moagram_usage";
+    static final long ACTIVE_REFRESH_MS = 6L * 60 * 60 * 1000;
+    static final long FEED_REFRESH_MS = 24L * 60 * 60 * 1000;
+    static final long TRANSIENT_RETRY_MS = 15L * 60 * 1000;
+    static final long DISABLED_RETRY_MS = 6L * 60 * 60 * 1000;
+    static final long WAKEUP_RETRY_DELAY_MS = 30L * 1000;
     private static final AtomicBoolean SENDING = new AtomicBoolean();
+    private static final AtomicBoolean RETRY_SCHEDULED = new AtomicBoolean();
 
     private MoagramUsage() {}
 
+    /** Only non-debug standalone installs with at least one signed-in account report usage. */
+    public static boolean eligible(boolean debugBuild, String packageName, boolean hasSignedInAccount) {
+        return !debugBuild && MoagramUpdatePolicy.PACKAGE.equals(packageName) && hasSignedInAccount;
+    }
+
     /** Null means nothing needs to be sent. */
     public static String choose(boolean acknowledged, boolean freshPackage, int versionCode, int reportedVersion, int today, int lastPingDay) {
+        return choose(acknowledged, freshPackage, versionCode, reportedVersion, today, lastPingDay, 0L, 0L);
+    }
+
+    /** Null means nothing needs to be sent. Refreshes active status every 6 hours while foregrounded. */
+    public static String choose(boolean acknowledged, boolean freshPackage, int versionCode,
+                                int reportedVersion, int today, int lastPingDay,
+                                long now, long lastPingAt) {
         if (!acknowledged) return freshPackage ? "install" : "update";
         if (versionCode > reportedVersion) return "update";
         if (lastPingDay != today) return "active";
+        if (lastPingAt > 0 && now > lastPingAt && now - lastPingAt >= ACTIVE_REFRESH_MS) return "active";
         return null;
     }
 
@@ -64,18 +84,42 @@ public final class MoagramUsage {
         Context context = ApplicationLoader.applicationContext;
         if (context == null || !sharing() || !SENDING.compareAndSet(false, true)) return;
         Utilities.globalQueue.postRunnable(() -> {
+            boolean networkFailure = false;
             try {
                 send(context);
             } catch (Throwable e) {
+                networkFailure = true;
                 FileLog.e(e);
             } finally {
                 SENDING.set(false);
             }
+            if (networkFailure) {
+                scheduleForegroundRetry();
+            }
         });
     }
 
+    private static void scheduleForegroundRetry() {
+        if (!RETRY_SCHEDULED.compareAndSet(false, true)) return;
+        Utilities.globalQueue.postRunnable(() -> {
+            RETRY_SCHEDULED.set(false);
+            ForegroundDetector detector = ForegroundDetector.getInstance();
+            if (detector != null && !detector.isBackground()) {
+                onForeground();
+            }
+        }, WAKEUP_RETRY_DELAY_MS);
+    }
+
+    private static boolean hasSignedInAccount() {
+        try {
+            return UserConfig.getActivatedAccountsCount() > 0;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     private static void send(Context context) throws Exception {
-        if (!sharing() || !MoagramUpdatePolicy.PACKAGE.equals(context.getPackageName())) return;
+        if (!sharing() || !eligible(BuildConfig.DEBUG_VERSION, context.getPackageName(), hasSignedInAccount())) return;
         PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
         int version = (int) (Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode);
         SharedPreferences preferences = prefs(context);
@@ -89,27 +133,81 @@ public final class MoagramUsage {
         int day = utcDay(now);
         int reported = preferences.getInt("reported_version", -1);
         String event = choose(reported >= 0, freshInstall(info.firstInstallTime, info.lastUpdateTime),
-                version, reported, day, preferences.getInt("last_ping_day", 0));
+                version, reported, day, preferences.getInt("last_ping_day", 0),
+                now, preferences.getLong("last_ping_at", 0L));
         if (event == null) return;
-        String endpoint = usageUrl();
-        if (!allowedUrl(endpoint)) {
-            preferences.edit().putLong("retry_after", now + 6L * 60 * 60 * 1000).apply();
-            return;
-        }
+        String endpoint = resolveUsageUrl(preferences, now);
+        if (!allowedUrl(endpoint)) return;
         JSONObject body = new JSONObject();
         body.put("install_id", id);
         body.put("event", event);
         body.put("version_code", version);
         body.put("version_name", info.versionName == null ? "" : info.versionName);
         if (!post(endpoint, body.toString())) {
-            preferences.edit().putLong("retry_after", now + 15L * 60 * 1000).apply();
+            preferences.edit().putLong("retry_after", now + TRANSIENT_RETRY_MS).apply();
             return;
         }
-        preferences.edit().putInt("reported_version", version).putInt("last_ping_day", day).remove("retry_after").apply();
+        preferences.edit()
+                .putInt("reported_version", version)
+                .putInt("last_ping_day", day)
+                .putLong("last_ping_at", now)
+                .remove("retry_after")
+                .apply();
         if (BuildVars.LOGS_ENABLED) FileLog.d("Moagram usage recorded: " + event);
     }
 
-    private static String usageUrl() throws Exception {
+    /**
+     * Uses the cached collector URL for up to 24 hours and falls back to it if GitHub is unreachable.
+     * An HTTP 200 feed with an empty usage_url explicitly disables collection until the next check.
+     */
+    private static String resolveUsageUrl(SharedPreferences preferences, long now) throws Exception {
+        String cached = preferences.getString("usage_url", "");
+        long checkedAt = preferences.getLong("usage_url_checked_at", 0L);
+        if (allowedUrl(cached) && now >= checkedAt && now - checkedAt < FEED_REFRESH_MS) {
+            return cached;
+        }
+        try {
+            FeedResult result = fetchFeedUsageUrl();
+            if (result.ok) {
+                if (allowedUrl(result.url)) {
+                    preferences.edit()
+                            .putString("usage_url", result.url)
+                            .putLong("usage_url_checked_at", now)
+                            .apply();
+                    return result.url;
+                }
+                // Feed returned HTTP 200 with no usage_url: respect the remote kill-switch.
+                preferences.edit()
+                        .remove("usage_url")
+                        .putLong("usage_url_checked_at", now)
+                        .putLong("retry_after", now + DISABLED_RETRY_MS)
+                        .apply();
+                return "";
+            }
+        } catch (Exception e) {
+            if (allowedUrl(cached)) {
+                return cached;
+            }
+            throw e;
+        }
+        if (allowedUrl(cached)) {
+            return cached;
+        }
+        preferences.edit().putLong("retry_after", now + TRANSIENT_RETRY_MS).apply();
+        return "";
+    }
+
+    private static final class FeedResult {
+        final boolean ok;
+        final String url;
+
+        FeedResult(boolean ok, String url) {
+            this.ok = ok;
+            this.url = url;
+        }
+    }
+
+    private static FeedResult fetchFeedUsageUrl() throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(MoagramUpdatePolicy.FEED).openConnection();
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(15000);
@@ -117,8 +215,8 @@ public final class MoagramUsage {
         connection.setRequestProperty("User-Agent", "Moagram-Android-Usage");
         connection.setRequestProperty("Accept-Encoding", "identity");
         try {
-            if (connection.getResponseCode() != 200) return "";
-            return new JSONObject(readLimited(connection.getInputStream())).optString("usage_url", "");
+            if (connection.getResponseCode() != 200) return new FeedResult(false, "");
+            return new FeedResult(true, new JSONObject(readLimited(connection.getInputStream())).optString("usage_url", ""));
         } finally {
             connection.disconnect();
         }

@@ -152,7 +152,8 @@ async function dashboardDocument(db, now) {
                 ${stat(totals.active_30d, 'Last 30 days')}
                 ${stat(heard, 'Installs so far')}
             </section>
-            <p class="quiet">Active installs based on received reports. Reinstalling or clearing app data can create a new install.</p>
+            <p class="quiet">Returning (2+ UTC days): <strong>${Number(totals.returning_installs) || 0}</strong> · Fresh installs: ${Number(totals.new_installs) || 0} · Existing before counter: ${Number(totals.existing_installs) || 0} · Update events: ${Number(totals.update_events) || 0}.</p>
+            <p class="quiet">Active installs based on received reports. One-time opens or sandboxes appear on a single day; reinstalling or clearing app data can create a new install.</p>
             <h2>Last 30 days</h2>
             ${chart(days)}
             <p class="quiet">Each bar is a UTC day. An install counts once per day it reports. Today is incomplete; the cards above use rolling time windows.</p>
@@ -288,10 +289,15 @@ class UsageError extends Error {
 }
 
 async function readPayload(request) {
-    const advertised = Number(request.headers.get('content-length') || 0);
-    if (!advertised || advertised > 1024) throw new UsageError(400, 'Expected a small JSON body');
-    const raw = await request.text();
-    if (!raw || raw.length > 1024) throw new UsageError(400, 'Expected a small JSON body');
+    const lengthHeader = request.headers.get('content-length');
+    if (lengthHeader !== null) {
+        const advertised = Number(lengthHeader);
+        if (!Number.isFinite(advertised) || advertised <= 0 || advertised > 1024) {
+            throw new UsageError(400, 'Expected a small JSON body');
+        }
+    }
+    const raw = await readLimitedText(request, 1024);
+    if (!raw) throw new UsageError(400, 'Expected a small JSON body');
     try {
         const payload = JSON.parse(raw);
         if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -302,6 +308,31 @@ async function readPayload(request) {
         if (error instanceof UsageError) throw error;
         throw new UsageError(400, 'Invalid JSON');
     }
+}
+
+async function readLimitedText(request, maxBytes) {
+    if (!request.body) return '';
+    const reader = request.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            total += value.byteLength;
+            if (total > maxBytes) throw new UsageError(400, 'Expected a small JSON body');
+            chunks.push(value);
+        }
+    } finally {
+        reader.releaseLock();
+    }
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+        merged.set(chunk, offset);
+        offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(merged);
 }
 
 function checked(payload) {
@@ -378,6 +409,7 @@ async function summary(db, now) {
     return {
         new_installs: await count("SELECT COUNT(*) AS n FROM installs WHERE kind = 'install'"),
         existing_installs: await count("SELECT COUNT(*) AS n FROM installs WHERE kind = 'existing'"),
+        returning_installs: await count('SELECT COUNT(*) AS n FROM (SELECT id FROM daily GROUP BY id HAVING COUNT(*) >= 2)'),
         update_events: await count('SELECT COALESCE(SUM(update_count), 0) AS n FROM installs'),
         active_1d: await count('SELECT COUNT(*) AS n FROM installs WHERE last_seen >= ?', now - DAY),
         active_7d: await count('SELECT COUNT(*) AS n FROM installs WHERE last_seen >= ?', now - 7 * DAY),

@@ -8,6 +8,13 @@ public class MoagramUsageTest {
         check("active".equals(org.telegram.messenger.MoagramUsage.choose(true, true, 10, 10, 20261106, 20261105)), "another day");
         check(org.telegram.messenger.MoagramUsage.choose(true, true, 10, 10, 20261106, 20261106) == null, "already sent today");
         check(org.telegram.messenger.MoagramUsage.choose(true, true, 9, 10, 20261106, 20261106) == null, "older version is not an update");
+        long t0 = 1_795_000_000_000L;
+        check(org.telegram.messenger.MoagramUsage.choose(true, true, 10, 10, 20261106, 20261106, t0 + 3 * 3600_000L, t0) == null, "same day within 6h does not resend");
+        check("active".equals(org.telegram.messenger.MoagramUsage.choose(true, true, 10, 10, 20261106, 20261106, t0 + 6 * 3600_000L, t0)), "same day after 6h refreshes active window");
+        check(org.telegram.messenger.MoagramUsage.eligible(false, "org.moagram.messenger.web", true), "signed-in standalone release is eligible");
+        check(!org.telegram.messenger.MoagramUsage.eligible(true, "org.moagram.messenger.web", true), "debug build is excluded");
+        check(!org.telegram.messenger.MoagramUsage.eligible(false, "org.moagram.messenger.web", false), "logged-out install or sandbox is excluded");
+        check(!org.telegram.messenger.MoagramUsage.eligible(false, "org.telegram.messenger", true), "other package is excluded");
         check(org.telegram.messenger.MoagramUsage.freshInstall(1_000L, 1_000L), "same install and update time");
         check(org.telegram.messenger.MoagramUsage.freshInstall(1_000L, 50_000L), "short installer delay");
         check(!org.telegram.messenger.MoagramUsage.freshInstall(1_000L, 130_000L), "package was replaced");

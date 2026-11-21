@@ -107,6 +107,7 @@ class Store:
             return {
                 'new_installs': count("SELECT COUNT(*) FROM installs WHERE kind = 'install'"),
                 'existing_installs': count("SELECT COUNT(*) FROM installs WHERE kind = 'existing'"),
+                'returning_installs': count('SELECT COUNT(*) FROM (SELECT id FROM daily GROUP BY id HAVING COUNT(*) >= 2)'),
                 'update_events': count('SELECT COALESCE(SUM(update_count), 0) FROM installs'),
                 'active_1d': count('SELECT COUNT(*) FROM installs WHERE last_seen >= ?', now - DAY),
                 'active_7d': count('SELECT COUNT(*) FROM installs WHERE last_seen >= ?', now - 7 * DAY),
