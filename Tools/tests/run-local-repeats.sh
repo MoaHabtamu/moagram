@@ -7,6 +7,7 @@ python3 Tools/tests/test-passcode-flows.py
 python3 Tools/tests/test-ghost-requests.py
 python3 Tools/tests/test-ghost-settings.py
 python3 Tools/tests/test-moagram-ux.py
+python3 Tools/tests/test-download-hedge.py
 python3 Tools/tests/test-photo-permissions.py
 python3 Tools/tests/test-contact-sorting.py
 python3 Tools/tests/test-notification-service.py

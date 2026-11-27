@@ -113,7 +113,6 @@ import org.telegram.messenger.BirthdayController;
 import org.telegram.messenger.BotWebViewVibrationEffect;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ChatObject;
-import org.telegram.messenger.GhostModeController;
 import org.telegram.messenger.MoagramConfig;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
@@ -732,7 +731,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private boolean isHiddenChats;
     private ActionBarMenuSubItem hideItem;
     private ActionBarMenuSubItem unhideItem;
-    private ActionBarMenuItem ghostModeItem;
 
     private final static int ARCHIVE_ITEM_STATE_PINNED = 0;
     private final static int ARCHIVE_ITEM_STATE_SHOWED = 1;
@@ -2838,7 +2836,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 observersGroup.addGlobal(NotificationCenter.closeSearchByActiveAction);
                 observersGroup.addGlobal(NotificationCenter.proxySettingsChanged);
                 observersGroup.addGlobal(NotificationCenter.moagramConfigChanged);
-                observersGroup.add(NotificationCenter.ghostModeChanged);
                 observersGroup.add(NotificationCenter.filterSettingsUpdated);
                 observersGroup.add(NotificationCenter.dialogsUnreadCounterChanged);
             }
@@ -3238,18 +3235,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             downloadsItem.setVisibility(View.GONE);
 
             updateProxyButton(false, false);
-        }
-        if (!isHiddenChats && !onlySelect && searchString == null && folderId == 0 && communityId == 0) {
-            ghostModeItem = menu.addItem(25, R.drawable.msg_stories_stealth);
-            ghostModeItem.setContentDescription(getString(R.string.GhostModeToggleButton));
-            ghostModeItem.setOnLongClickListener(v -> {
-                try {
-                    v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                } catch (Exception ignored) {}
-                presentFragment(new GhostModeActivity(currentAccount));
-                return true;
-            });
-            updateGhostModeButton();
         }
         if (!isHiddenChats && !onlySelect && searchString == null && folderId == 0 && communityId == 0
                 && HiddenChatsController.getInstance(currentAccount).opensFromButton()) {
@@ -3944,18 +3929,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     finishFragment();
                 } else if (id == 24) {
                     showHiddenChatsUnlockDialog();
-                } else if (id == 25) {
-                    GhostModeController ghostMode = GhostModeController.getInstance(currentAccount);
-                    boolean next = !ghostMode.enabled;
-                    ghostMode.setEnabled(next);
-                    if (next && ghostMode.hideOnline) {
-                        getMessagesController().sendOfflineStatus();
-                    }
-                    updateGhostModeButton();
-                    BulletinFactory.of(DialogsActivity.this).createSimpleBulletin(
-                            R.drawable.msg_stories_stealth,
-                            getString(next ? R.string.GhostModeEnabledToast : R.string.GhostModeDisabledToast)
-                    ).show();
                 } else if (id == 1) {
                     if (getParentActivity() == null) {
                         return;
@@ -10655,10 +10628,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 filterTabsView.checkTabsCounter();
             }
             slowedReloadAfterDialogClick = false;
-        } else if (id == NotificationCenter.ghostModeChanged) {
-            updateGhostModeButton();
         } else if (id == NotificationCenter.moagramConfigChanged) {
-            updateGhostModeButton();
             updateStoriesVisibility(false);
         } else if (id == NotificationCenter.topicsDidLoaded) {
             updateVisibleRows(0);
@@ -12696,18 +12666,6 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             return filterTabsView.isFirstTab();
         }
         return true;
-    }
-
-    private void updateGhostModeButton() {
-        if (ghostModeItem == null) {
-            return;
-        }
-        boolean show = MoagramConfig.isShowGhostModeButton();
-        ghostModeItem.setVisibility(show ? View.VISIBLE : View.GONE);
-        if (show) {
-            boolean enabled = GhostModeController.getInstance(currentAccount).enabled;
-            ghostModeItem.setAlpha(enabled ? 1.0f : 0.45f);
-        }
     }
 
     public void updateStoriesVisibility(boolean animated) {

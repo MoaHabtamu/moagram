@@ -35,7 +35,6 @@ public class MoagramUxActivity extends BaseFragment {
     private int confirmGifsRow;
     private int confirmationsShadowRow;
     private int interfaceHeaderRow;
-    private int showGhostButtonRow;
     private int hideStoriesRow;
     private int hideGiftButtonRow;
     private int disableNextChannelRow;
@@ -68,7 +67,6 @@ public class MoagramUxActivity extends BaseFragment {
         confirmGifsRow = rowCount++;
         confirmationsShadowRow = rowCount++;
         interfaceHeaderRow = rowCount++;
-        showGhostButtonRow = rowCount++;
         hideStoriesRow = rowCount++;
         hideGiftButtonRow = rowCount++;
         disableNextChannelRow = rowCount++;
@@ -122,10 +120,6 @@ public class MoagramUxActivity extends BaseFragment {
             } else if (position == confirmGifsRow) {
                 boolean next = !MoagramConfig.isConfirmGifs();
                 MoagramConfig.setConfirmGifs(next);
-                cell.setChecked(next);
-            } else if (position == showGhostButtonRow) {
-                boolean next = !MoagramConfig.isShowGhostModeButton();
-                MoagramConfig.setShowGhostModeButton(next);
                 cell.setChecked(next);
             } else if (position == hideStoriesRow) {
                 boolean next = !MoagramConfig.isHideStoriesBar();
@@ -223,11 +217,6 @@ public class MoagramUxActivity extends BaseFragment {
                                 LocaleController.getString(R.string.MoagramUxConfirmGifs),
                                 LocaleController.getString(R.string.MoagramUxConfirmGifsInfo),
                                 MoagramConfig.isConfirmGifs(), true, false);
-                    } else if (position == showGhostButtonRow) {
-                        cell.setTextAndValueAndCheck(
-                                LocaleController.getString(R.string.MoagramUxShowGhostButton),
-                                LocaleController.getString(R.string.MoagramUxShowGhostButtonInfo),
-                                MoagramConfig.isShowGhostModeButton(), true, true);
                     } else if (position == hideStoriesRow) {
                         cell.setTextAndValueAndCheck(
                                 LocaleController.getString(R.string.MoagramUxHideStories),

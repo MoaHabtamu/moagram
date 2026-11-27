@@ -114,11 +114,8 @@
     <string name="MoagramNone">None</string>
 
     <!-- Ghost Mode quick controls -->
-    <string name="GhostModeEnabledToast">Ghost Mode enabled</string>
-    <string name="GhostModeDisabledToast">Ghost Mode disabled</string>
     <string name="GhostModeMarkReadNow">Mark as Read Now</string>
     <string name="GhostModeMarkedReadToast">Chat marked as read</string>
-    <string name="GhostModeToggleButton">Toggle Ghost Mode</string>
     <string name="GhostModeLocalHistoryLink">Local History &amp; Media</string>
     <string name="GhostModeLocalHistoryLinkInfo">Deleted messages, edit history, cached story viewers, and saving controls are configured under Local History &amp; Media.</string>
 
@@ -214,8 +211,6 @@
     <string name="MoagramUxConfirmGifMessage">Send this GIF to the current chat?</string>
 
     <string name="MoagramUxInterfaceHeader">Chat List &amp; Compose</string>
-    <string name="MoagramUxShowGhostButton">Ghost Mode Quick Toggle</string>
-    <string name="MoagramUxShowGhostButtonInfo">Show a Ghost Mode toggle icon in the main chat list header. Tap to toggle, long-press to open settings.</string>
     <string name="MoagramUxHideStories">Hide Stories Bar</string>
     <string name="MoagramUxHideStoriesInfo">Hide the Stories strip at the top of the chat list.</string>
     <string name="MoagramUxHideGiftButton">Hide Gift Button</string>

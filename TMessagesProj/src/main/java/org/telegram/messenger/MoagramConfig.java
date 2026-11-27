@@ -24,7 +24,6 @@ public final class MoagramConfig {
     private static final Object LOCK = new Object();
     private static volatile boolean loaded;
 
-    public static volatile boolean showGhostModeButton = true;
     public static volatile boolean downloadSpeedBoost = true;
     public static volatile boolean confirmCalls = false;
     public static volatile boolean confirmStickers = false;
@@ -50,7 +49,6 @@ public final class MoagramConfig {
                 return;
             }
             SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            showGhostModeButton = prefs.getBoolean("showGhostModeButton", true);
             downloadSpeedBoost = prefs.getBoolean("downloadSpeedBoost", true);
             confirmCalls = prefs.getBoolean("confirmCalls", false);
             confirmStickers = prefs.getBoolean("confirmStickers", false);
@@ -67,7 +65,6 @@ public final class MoagramConfig {
     public static void resetForTests() {
         synchronized (LOCK) {
             loaded = false;
-            showGhostModeButton = true;
             downloadSpeedBoost = true;
             confirmCalls = false;
             confirmStickers = false;
@@ -89,20 +86,6 @@ public final class MoagramConfig {
                     .apply();
         }
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.moagramConfigChanged);
-    }
-
-    public static boolean isShowGhostModeButton() {
-        ensureLoaded();
-        return showGhostModeButton;
-    }
-
-    public static void setShowGhostModeButton(boolean value) {
-        ensureLoaded();
-        if (showGhostModeButton == value) {
-            return;
-        }
-        showGhostModeButton = value;
-        saveAndNotify("showGhostModeButton", value);
     }
 
     public static boolean isDownloadSpeedBoost() {
@@ -234,7 +217,6 @@ public final class MoagramConfig {
     public static int getEnabledUxModCount() {
         ensureLoaded();
         int count = 0;
-        if (showGhostModeButton) count++;
         if (downloadSpeedBoost) count++;
         if (confirmCalls) count++;
         if (confirmStickers) count++;

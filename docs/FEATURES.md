@@ -13,7 +13,6 @@ Open **Settings → Ghost Mode** (or **Settings → Moagram Settings → Ghost M
 - Hide online status and outgoing typing/recording indicators.
 - Control outgoing read receipts, including marking a chat as read when replying, plus a per-chat **Mark as Read Now** overflow action when Ghost Read is active.
 - Control story-view reporting and stealth-send behavior.
-- Toggle Ghost Mode quickly from the main chat list header (tap to toggle, long-press to open settings; can be hidden under **Interface & Confirmations**).
 
 These controls change requests sent by this client. They do not make an account anonymous or establish guarantees about what Telegram's servers, recipients, or another signed-in client observe. Behavior can vary with message type and server changes. Test the settings with another account before depending on them.
 
@@ -40,9 +39,9 @@ This screen also includes controls for saving restricted content, bypassing chan
 Open **Settings → Moagram Settings → Interface & Confirmations** to configure optional everyday UX tweaks (all app-wide):
 
 - **Accidental-action guards:** Confirm before starting voice/video calls, sending stickers, or sending GIFs.
-- **Chat list & compose:** Show or hide the Ghost Mode header quick-toggle, hide the Stories bar, hide the Gift button in the message input bar, and disable pulling up at the bottom of a channel to jump to the next unread channel.
+- **Chat list & compose:** Hide the Stories bar, hide the Gift button in the message input bar, and disable pulling up at the bottom of a channel to jump to the next unread channel.
 - **Messages & profiles:** Show exact seconds on message timestamps and show copyable numeric IDs on user, group, and channel profiles.
-- **Media & downloads:** **Download Speed Boost** (enabled by default for free accounts) uses 8 parallel download connections with 512 KB pipelined chunks (`128 KB` for small files) instead of Telegram's default 2-connection / 2 MB byte-budget throttle, improving throughput especially on distant datacenters and lossy mobile networks. Turn it off if your network or account hits rate limits.
+- **Media & downloads:** **Download Speed Boost** (enabled by default for free accounts) uses 8 parallel download connections with 512 KB pipelined chunks (`128 KB` for small files) instead of Telegram's default 2-connection / 2 MB byte-budget throttle, improving throughput especially on distant datacenters and lossy mobile networks. When the download is waiting on a chunk that other chunks have overtaken and that has taken more than 3× the recent average (2–12 s), the chunk is re-requested on another connection and the first copy to arrive wins. This shortens the stall near the end of a download, which otherwise lasts until the slow connection recovers or its 25 s idle timeout reconnects it. Turn it off if your network or account hits rate limits.
 
 **Settings → Moagram Settings** also shows a **Background & Delivery Health** section reporting Android battery optimization exemption, system notification permission, and Keep-Alive status, with one-tap shortcuts to the relevant system settings.
 

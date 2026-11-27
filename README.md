@@ -23,7 +23,7 @@ The development source is based on Telegram **13.2.2** and requires **Android 6.
 | **Moagram Settings** | Unified hub under **Settings → Moagram Settings** for Ghost Mode, Hidden Chats, Local History & Media, Repeating Messages, Interface & Confirmations, Background Health, and Updates. |
 | **Repeating messages** | Queue up to seven future occurrences per local rule on free accounts. Moagram tries to refill them about every twelve hours while the app is closed. Opening the app is the reliable path if Android delays that wakeup. |
 | **Manage Repeats** | View all active and paused repeating rules across chats in **Moagram Settings → Repeating Messages** or per chat, inspect errors, retry paused rules, or stop a series. |
-| **Ghost Mode** | Configure online-presence, typing, read-receipt, and story-view behavior per account, with a header quick-toggle button and per-chat **Mark as Read Now** action. |
+| **Ghost Mode** | Configure online-presence, typing, read-receipt, and story-view behavior per account, with a per-chat **Mark as Read Now** action. |
 | **Hidden chats** | Hide selected chats from the normal list and configure opening triggers, passcode protection, and notifications in a dedicated settings screen. |
 | **Local history & media** | Dedicated app-wide settings for retaining received deleted messages, deleted media, message edit history, self-destructing media, cached story viewers, and content saving. |
 | **Interface & confirmations** | Optional accidental-action guards (confirm calls, stickers, GIFs), hide Stories bar or Gift button, disable next-channel pull, show seconds in timestamps, show copyable User/Chat IDs on profiles, and toggle **Download Speed Boost** (8 parallel connections with 512 KB pipelined chunks). |

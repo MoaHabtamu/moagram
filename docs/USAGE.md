@@ -35,7 +35,7 @@ For builds with the updater, use **Settings → Moagram Updates → Check for up
 ## Find the custom features
 
 - **Settings → Moagram Settings:** unified hub for Ghost Mode, Hidden Chats, Local History & Media, Repeating Messages, Interface & Confirmations, Background & Delivery Health, and Updates.
-- **Settings → Ghost Mode:** direct shortcut to account-specific presence and receipt controls (or tap the Ghost Mode icon in the main chat list header). See [Features](FEATURES.md).
+- **Settings → Ghost Mode:** direct shortcut to account-specific presence and receipt controls. See [Features](FEATURES.md).
 - **Settings → Moagram Settings → Hidden Chats:** opening triggers, passcode protection, and notification preferences.
 - **Settings → Moagram Settings → Repeating Messages** (or **Chat menu → Manage Repeats**): local series across chats, queued counts, errors, retry, and stop controls. See [Repeating messages](REPEATING_MESSAGES.md).
 

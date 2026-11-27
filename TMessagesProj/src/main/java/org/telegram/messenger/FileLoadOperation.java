@@ -50,6 +50,15 @@ public class FileLoadOperation {
     private boolean useDownloadByteBudget;
     private int downloadConnectionsCount = 2;
     private boolean paceDocumentRequests;
+    private boolean hedgingEnabled;
+    private DownloadHedgePolicy hedgePolicy;
+    private final ArrayList<RequestInfo> hedgeRequestInfos = new ArrayList<>();
+    private boolean stragglerCheckScheduled;
+    private long latestChunkCompletedTime;
+    private final Runnable stragglerCheck = () -> {
+        stragglerCheckScheduled = false;
+        checkStragglers();
+    };
     private DownloadRequestPacer downloadRequestPacer;
     private final Runnable pacedDownloadRequest = () -> {
         // Unlike response callbacks, a timer must never restart a cancelling operation.
@@ -122,6 +131,14 @@ public class FileLoadOperation {
         private boolean forceSmallChunk;
         public boolean cancelling, cancelled;
         public Runnable whenCancelled;
+        // Straggler hedging: first and latest write to a socket (a resend writes again), and the duplicate racing it.
+        private volatile long firstWrittenTime;
+        private volatile long writtenTime;
+        private int requestFlags;
+        private RequestInfo hedgePartner;
+        private boolean isHedge;
+        private int hedgeCount;
+        private int failedHedgeConnection = -1;
     }
 
     public static class Range {
@@ -844,6 +861,7 @@ public class FileLoadOperation {
         paused = true;
         speedStartTime = 0;
         Utilities.stageQueue.postRunnable(() -> {
+            cancelHedges();
             if (isStory) {
                 if (BuildVars.LOGS_ENABLED) {
                     FileLog.d("debug_loading: " + cacheFileFinal.getName() + " pause operation, clear requests");
@@ -864,11 +882,17 @@ public class FileLoadOperation {
     // Snapshot the policy for this operation, including its connection pool.
     // Streams use it too, like TDLib, which shares one downloader between streaming and downloads.
     private void updateDownloadByteBudget() {
+        hedgingEnabled = false;
         boolean premium = UserConfig.getInstance(currentAccount).isPremium();
         if (!premium && MoagramConfig.isDownloadSpeedBoost() && !forceSmallChunk && !isStory) {
             // Use tgnet's count-based scheduler across 8 sockets with 512 KB pipelined chunks.
             useDownloadByteBudget = false;
             downloadConnectionsCount = ConnectionsManager.DownloadConnectionsCount;
+            // Re-request chunks stuck on a slow socket so the last few parts do not stall the file.
+            hedgingEnabled = downloadConnectionsCount > 1 && !isPreloadVideoOperation;
+            if (hedgingEnabled && hedgePolicy == null) {
+                hedgePolicy = new DownloadHedgePolicy();
+            }
             return;
         }
         useDownloadByteBudget = !MessagesController.getInstance(currentAccount).downloadImprovementKillswitch &&
@@ -1477,6 +1501,7 @@ public class FileLoadOperation {
 
     private void cancelRequests(Runnable fullyCancelled) {
         FileLog.d("cancelRequests" + (fullyCancelled != null ? " with callback" : ""));
+        cancelHedges();
         if (requestInfos != null) {
             int[] waitingForCancelledCount = new int[1];
             int[] waitingDownloadSize = new int[ConnectionsManager.DownloadConnectionsCount];
@@ -1610,6 +1635,7 @@ public class FileLoadOperation {
             return;
         }
         state = stateFinished;
+        cancelHedges();
         notifyStreamListeners();
         cleanup();
         if (isPreloadVideoOperation || preload) {
@@ -2184,6 +2210,7 @@ public class FileLoadOperation {
     }
 
     protected void onFail(boolean thread, final int reason) {
+        cancelHedges();
         cleanup();
         state = reason == 1 ? stateCanceled : stateFailed;
         if (delegate != null) {
@@ -2212,6 +2239,7 @@ public class FileLoadOperation {
     }
 
     private void clearOperation(RequestInfo currentInfo, boolean preloadChanged, boolean acceptChunksAfterCancel) {
+        cancelHedges();
         long minOffset = Long.MAX_VALUE;
         int[] waitingDownloadSize = new int[ConnectionsManager.DownloadConnectionsCount];
         for (int a = 0; a < requestInfos.size(); a++) {
@@ -2319,6 +2347,10 @@ public class FileLoadOperation {
         }
         if (state == stateCancelling) {
             state = stateDownloading;
+        }
+        if (!paused && state == stateDownloading && requestInfos != null && !requestInfos.isEmpty()) {
+            // Re-arms the straggler check after a resume that has no new chunk to send.
+            scheduleStragglerCheck();
         }
         if (paused || reuploadingCdn || state != stateDownloading || requestingReference ||
                 (!isStory && streamPriorityStartOffset == 0 && (!nextPartWasPreloaded && (requestInfos.size() + delayedRequestInfos.size() >= currentMaxDownloadRequests))) ||
@@ -2466,28 +2498,9 @@ public class FileLoadOperation {
                     flags |= ConnectionsManager.RequestFlagSmallDownload;
                 }
             }
+            request = createChunkRequest(downloadOffset, currentDownloadChunkSize);
             if (isCdn) {
-                TLRPC.TL_upload_getCdnFile req = new TLRPC.TL_upload_getCdnFile();
-                req.file_token = cdnToken;
-                req.offset = downloadOffset;
-                req.limit = currentDownloadChunkSize;
-                request = req;
                 flags |= ConnectionsManager.RequestFlagEnableUnauthorized;
-            } else {
-                if (webLocation != null) {
-                    TLRPC.TL_upload_getWebFile req = new TLRPC.TL_upload_getWebFile();
-                    req.location = webLocation;
-                    req.offset = (int) downloadOffset;
-                    req.limit = currentDownloadChunkSize;
-                    request = req;
-                } else {
-                    TLRPC.TL_upload_getFile req = new TLRPC.TL_upload_getFile();
-                    req.location = location;
-                    req.offset = downloadOffset;
-                    req.limit = currentDownloadChunkSize;
-                    req.cdn_supported = true;
-                    request = req;
-                }
             }
             requestedBytesCount += currentDownloadChunkSize;
             final RequestInfo requestInfo = new RequestInfo();
@@ -2541,177 +2554,7 @@ public class FileLoadOperation {
             }
             flags |= ConnectionsManager.RequestFlagListenAfterCancel;
             int datacenterId = isCdn ? cdnDatacenterId : this.datacenterId;
-            final int requestToken = requestInfo.requestToken = ConnectionsManager.getInstance(currentAccount).sendRequestSync(request, (response, error) -> {
-                if (requestInfo.cancelled) {
-                    FileLog.e("received chunk but definitely cancelled offset=" + requestInfo.offset + " size=" + requestInfo.chunkSize + " token=" + requestInfo.requestToken);
-                    return;
-                }
-                if (requestInfo.cancelling) {
-                    FileLog.e("received cancelled chunk after cancelRequests! offset=" + requestInfo.offset + " size=" + requestInfo.chunkSize + " token=" + requestInfo.requestToken);
-                }
-                if (!requestInfos.contains(requestInfo)) {
-                    if (!cancelledRequestInfos.contains(requestInfo)) {
-                        return;
-                    }
-
-                    boolean replaced = false;
-                    for (int i = 0; i < requestInfos.size(); ++i) {
-                        RequestInfo r = requestInfos.get(i);
-                        if (r != null && r != requestInfo && r.offset == requestInfo.offset && r.chunkSize == requestInfo.chunkSize) {
-                            FileLog.e("received cancelled chunk faster than new one! received=" + requestInfo.requestToken + " new=" + r.requestToken);
-                            if (!replaced) {
-                                requestInfos.set(i, requestInfo);
-                                replaced = true;
-                            } else {
-                                requestInfos.remove(i);
-                                i--;
-                            }
-                        }
-                    }
-                }
-                for (int i = 0; i < cancelledRequestInfos.size(); ++i) {
-                    RequestInfo r = cancelledRequestInfos.get(i);
-                    if (r != null && r != requestInfo && r.offset == requestInfo.offset && r.chunkSize == requestInfo.chunkSize) {
-                        FileLog.e("received new chunk faster than cancelled one! received=" + requestInfo.requestToken + " cancelled=" + r.requestToken);
-                        cancelledRequestInfos.remove(i);
-                        i--;
-                    }
-                }
-
-                if (BuildVars.LOGS_ENABLED) {
-                    FileLog.d("debug_loading: " + cacheFileFinal.getName() + " time=" + (System.currentTimeMillis() - requestInfo.requestStartTime) + " dcId=" + datacenterId + " cdn=" + isCdn + " conType=" + connectionType + " reqId" + requestInfo.requestToken);
-                }
-                if (requestInfo == priorityRequestInfo) {
-                    if (BuildVars.DEBUG_VERSION) {
-                        FileLog.d("frame get request completed " + priorityRequestInfo.offset);
-                    }
-                    priorityRequestInfo = null;
-                }
-                if (error != null) {
-                    if (requestInfo.whenCancelled != null) {
-                        requestInfo.whenCancelled.run();
-                    }
-                    if (error.code == -2000) {
-                        requestInfos.remove(requestInfo);
-                        requestedBytesCount -= requestInfo.chunkSize;
-                        removePart(notRequestedBytesRanges, requestInfo.offset, requestInfo.offset + requestInfo.chunkSize);
-                        return;
-                    } else if (FileRefController.isFileRefError(error.text)) {
-                        requestReference(requestInfo);
-                        return;
-                    } else if (request instanceof TLRPC.TL_upload_getCdnFile) {
-                        if (error.text.equals("FILE_TOKEN_INVALID")) {
-                            isCdn = false;
-                            clearOperation(requestInfo, false, false);
-                            startDownloadRequest(connectionType);
-                            return;
-                        }
-                    }
-                }
-                if (response instanceof TLRPC.TL_upload_fileCdnRedirect) {
-                    TLRPC.TL_upload_fileCdnRedirect res = (TLRPC.TL_upload_fileCdnRedirect) response;
-                    if (!res.file_hashes.isEmpty()) {
-                        if (cdnHashes == null) {
-                            cdnHashes = new HashMap<>();
-                        }
-                        for (int a1 = 0; a1 < res.file_hashes.size(); a1++) {
-                            TLRPC.TL_fileHash hash = res.file_hashes.get(a1);
-                            cdnHashes.put(hash.offset, hash);
-                        }
-                    }
-                    if (res.encryption_iv == null || res.encryption_key == null || res.encryption_iv.length != 16 || res.encryption_key.length != 32) {
-                        if (requestInfo.whenCancelled != null) {
-                            requestInfo.whenCancelled.run();
-                        }
-                        error = new TLRPC.TL_error();
-                        error.text = "bad redirect response";
-                        error.code = 400;
-                        processRequestResult(requestInfo, error);
-                    } else {
-                        isCdn = true;
-                        if (notCheckedCdnRanges == null) {
-                            notCheckedCdnRanges = new ArrayList<>();
-                            notCheckedCdnRanges.add(new Range(0, maxCdnParts));
-                        }
-                        cdnDatacenterId = res.dc_id;
-                        cdnIv = res.encryption_iv;
-                        cdnKey = res.encryption_key;
-                        cdnToken = res.file_token;
-                        clearOperation(requestInfo, false, false);
-                        startDownloadRequest(connectionType);
-                    }
-                } else if (response instanceof TLRPC.TL_upload_cdnFileReuploadNeeded) {
-                    if (!reuploadingCdn) {
-                        clearOperation(requestInfo, false, false);
-                        reuploadingCdn = true;
-                        TLRPC.TL_upload_cdnFileReuploadNeeded res = (TLRPC.TL_upload_cdnFileReuploadNeeded) response;
-                        TLRPC.TL_upload_reuploadCdnFile req = new TLRPC.TL_upload_reuploadCdnFile();
-                        req.file_token = cdnToken;
-                        req.request_token = res.request_token;
-                        ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response1, error1) -> {
-                            reuploadingCdn = false;
-                            if (response1 instanceof Vector) {
-                                final Vector<TLRPC.TL_fileHash> vector = (Vector) response1;
-                                if (!vector.objects.isEmpty()) {
-                                    if (cdnHashes == null) {
-                                        cdnHashes = new HashMap<>();
-                                    }
-                                    for (int a1 = 0; a1 < vector.objects.size(); a1++) {
-                                        final TLRPC.TL_fileHash hash = vector.objects.get(a1);
-                                        cdnHashes.put(hash.offset, hash);
-                                    }
-                                }
-                                startDownloadRequest(connectionType);
-                            } else if (error1 != null) {
-                                if (error1.text.equals("FILE_TOKEN_INVALID") || error1.text.equals("REQUEST_TOKEN_INVALID")) {
-                                    isCdn = false;
-                                    clearOperation(requestInfo, false, false);
-                                    startDownloadRequest(connectionType);
-                                } else {
-                                    onFail(false, 0);
-                                }
-                            }
-                        }, null, null, 0, this.datacenterId, ConnectionsManager.ConnectionTypeGeneric, true);
-                    }
-                } else {
-                    if (response instanceof TLRPC.TL_upload_file) {
-                        requestInfo.response = (TLRPC.TL_upload_file) response;
-                    } else if (response instanceof TLRPC.TL_upload_webFile) {
-                        requestInfo.responseWeb = (TLRPC.TL_upload_webFile) response;
-                        if (totalBytesCount == 0 && requestInfo.responseWeb.size != 0) {
-                            totalBytesCount = requestInfo.responseWeb.size;
-                        }
-                    } else {
-                        requestInfo.responseCdn = (TLRPC.TL_upload_cdnFile) response;
-                    }
-                    if (response != null) {
-                        if (currentType == ConnectionsManager.FileTypeAudio) {
-                            StatsController.getInstance(currentAccount).incrementReceivedBytesCount(response.networkType, StatsController.TYPE_AUDIOS, response.getObjectSize() + 4);
-                        } else if (currentType == ConnectionsManager.FileTypeVideo) {
-                            StatsController.getInstance(currentAccount).incrementReceivedBytesCount(response.networkType, StatsController.TYPE_VIDEOS, response.getObjectSize() + 4);
-                        } else if (currentType == ConnectionsManager.FileTypePhoto) {
-                            StatsController.getInstance(currentAccount).incrementReceivedBytesCount(response.networkType, StatsController.TYPE_PHOTOS, response.getObjectSize() + 4);
-                        } else if (currentType == ConnectionsManager.FileTypeFile) {
-                            if (ext != null && (ext.toLowerCase().endsWith("mp3") || ext.toLowerCase().endsWith("m4a"))) {
-                                StatsController.getInstance(currentAccount).incrementReceivedBytesCount(response.networkType, StatsController.TYPE_MUSIC, response.getObjectSize() + 4);
-                            } else {
-                                StatsController.getInstance(currentAccount).incrementReceivedBytesCount(response.networkType, StatsController.TYPE_FILES, response.getObjectSize() + 4);
-                            }
-                        }
-                    }
-                    if (error == null && response != null) {
-                        measureSpeed(response.getObjectSize());
-                    }
-                    processRequestResult(requestInfo, error);
-                    if (requestInfo.whenCancelled != null) {
-                        requestInfo.whenCancelled.run();
-                    }
-                }
-            }, null, null, flags, datacenterId, connectionType, isLast);
-            if (BuildVars.LOGS_ENABLED) {
-                FileLog.d("debug_loading: " + cacheFileFinal.getName() + " dc=" + datacenterId + " send reqId " + requestInfo.requestToken + " offset=" + requestInfo.offset + " conType=" + connectionType + " priority=" + priority);
-            }
-            AndroidUtilities.runOnUIThread(() -> uiRequestTokens.add(requestToken));
+            sendChunkRequest(request, requestInfo, flags, datacenterId, connectionType, isLast);
             requestsCount++;
             if (downloadRequestPacer != null) {
                 long now = SystemClock.uptimeMillis();
@@ -2719,6 +2562,421 @@ public class FileLoadOperation {
                 Utilities.stageQueue.postRunnable(pacedDownloadRequest, downloadRequestPacer.remainingDelay(now));
             }
         }
+    }
+
+    private TLObject createChunkRequest(long offset, int limit) {
+        if (isCdn) {
+            TLRPC.TL_upload_getCdnFile req = new TLRPC.TL_upload_getCdnFile();
+            req.file_token = cdnToken;
+            req.offset = offset;
+            req.limit = limit;
+            return req;
+        } else if (webLocation != null) {
+            TLRPC.TL_upload_getWebFile req = new TLRPC.TL_upload_getWebFile();
+            req.location = webLocation;
+            req.offset = (int) offset;
+            req.limit = limit;
+            return req;
+        } else {
+            TLRPC.TL_upload_getFile req = new TLRPC.TL_upload_getFile();
+            req.location = location;
+            req.offset = offset;
+            req.limit = limit;
+            req.cdn_supported = true;
+            return req;
+        }
+    }
+
+    private void sendChunkRequest(TLObject request, RequestInfo requestInfo, int flags, int datacenterId, int connectionType, boolean isLast) {
+        requestInfo.requestFlags = flags;
+        final int requestToken = requestInfo.requestToken = ConnectionsManager.getInstance(currentAccount).sendRequestSync(request, (response, error) -> {
+            if (requestInfo.cancelled) {
+                FileLog.e("received chunk but definitely cancelled offset=" + requestInfo.offset + " size=" + requestInfo.chunkSize + " token=" + requestInfo.requestToken);
+                return;
+            }
+            if (requestInfo.cancelling) {
+                FileLog.e("received cancelled chunk after cancelRequests! offset=" + requestInfo.offset + " size=" + requestInfo.chunkSize + " token=" + requestInfo.requestToken);
+            }
+            if (requestInfo.hedgePartner != null || requestInfo.isHedge) {
+                if (!resolveHedgedResponse(requestInfo, response, error)) {
+                    return;
+                }
+            }
+            if (!requestInfos.contains(requestInfo)) {
+                if (!cancelledRequestInfos.contains(requestInfo)) {
+                    return;
+                }
+
+                boolean replaced = false;
+                for (int i = 0; i < requestInfos.size(); ++i) {
+                    RequestInfo r = requestInfos.get(i);
+                    if (r != null && r != requestInfo && r.offset == requestInfo.offset && r.chunkSize == requestInfo.chunkSize) {
+                        FileLog.e("received cancelled chunk faster than new one! received=" + requestInfo.requestToken + " new=" + r.requestToken);
+                        if (!replaced) {
+                            requestInfos.set(i, requestInfo);
+                            replaced = true;
+                        } else {
+                            requestInfos.remove(i);
+                            i--;
+                        }
+                    }
+                }
+            }
+            for (int i = 0; i < cancelledRequestInfos.size(); ++i) {
+                RequestInfo r = cancelledRequestInfos.get(i);
+                if (r != null && r != requestInfo && r.offset == requestInfo.offset && r.chunkSize == requestInfo.chunkSize) {
+                    FileLog.e("received new chunk faster than cancelled one! received=" + requestInfo.requestToken + " cancelled=" + r.requestToken);
+                    cancelledRequestInfos.remove(i);
+                    i--;
+                }
+            }
+
+            if (BuildVars.LOGS_ENABLED) {
+                FileLog.d("debug_loading: " + cacheFileFinal.getName() + " time=" + (System.currentTimeMillis() - requestInfo.requestStartTime) + " dcId=" + datacenterId + " cdn=" + isCdn + " conType=" + connectionType + " reqId" + requestInfo.requestToken);
+            }
+            if (requestInfo == priorityRequestInfo) {
+                if (BuildVars.DEBUG_VERSION) {
+                    FileLog.d("frame get request completed " + priorityRequestInfo.offset);
+                }
+                priorityRequestInfo = null;
+            }
+            if (error != null) {
+                if (requestInfo.whenCancelled != null) {
+                    requestInfo.whenCancelled.run();
+                }
+                if (error.code == -2000) {
+                    requestInfos.remove(requestInfo);
+                    requestedBytesCount -= requestInfo.chunkSize;
+                    removePart(notRequestedBytesRanges, requestInfo.offset, requestInfo.offset + requestInfo.chunkSize);
+                    return;
+                } else if (FileRefController.isFileRefError(error.text)) {
+                    requestReference(requestInfo);
+                    return;
+                } else if (request instanceof TLRPC.TL_upload_getCdnFile) {
+                    if (error.text.equals("FILE_TOKEN_INVALID")) {
+                        isCdn = false;
+                        clearOperation(requestInfo, false, false);
+                        startDownloadRequest(connectionType);
+                        return;
+                    }
+                }
+            }
+            if (response instanceof TLRPC.TL_upload_fileCdnRedirect) {
+                TLRPC.TL_upload_fileCdnRedirect res = (TLRPC.TL_upload_fileCdnRedirect) response;
+                if (!res.file_hashes.isEmpty()) {
+                    if (cdnHashes == null) {
+                        cdnHashes = new HashMap<>();
+                    }
+                    for (int a1 = 0; a1 < res.file_hashes.size(); a1++) {
+                        TLRPC.TL_fileHash hash = res.file_hashes.get(a1);
+                        cdnHashes.put(hash.offset, hash);
+                    }
+                }
+                if (res.encryption_iv == null || res.encryption_key == null || res.encryption_iv.length != 16 || res.encryption_key.length != 32) {
+                    if (requestInfo.whenCancelled != null) {
+                        requestInfo.whenCancelled.run();
+                    }
+                    error = new TLRPC.TL_error();
+                    error.text = "bad redirect response";
+                    error.code = 400;
+                    processRequestResult(requestInfo, error);
+                } else {
+                    isCdn = true;
+                    if (notCheckedCdnRanges == null) {
+                        notCheckedCdnRanges = new ArrayList<>();
+                        notCheckedCdnRanges.add(new Range(0, maxCdnParts));
+                    }
+                    cdnDatacenterId = res.dc_id;
+                    cdnIv = res.encryption_iv;
+                    cdnKey = res.encryption_key;
+                    cdnToken = res.file_token;
+                    clearOperation(requestInfo, false, false);
+                    startDownloadRequest(connectionType);
+                }
+            } else if (response instanceof TLRPC.TL_upload_cdnFileReuploadNeeded) {
+                if (!reuploadingCdn) {
+                    clearOperation(requestInfo, false, false);
+                    reuploadingCdn = true;
+                    TLRPC.TL_upload_cdnFileReuploadNeeded res = (TLRPC.TL_upload_cdnFileReuploadNeeded) response;
+                    TLRPC.TL_upload_reuploadCdnFile req = new TLRPC.TL_upload_reuploadCdnFile();
+                    req.file_token = cdnToken;
+                    req.request_token = res.request_token;
+                    ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response1, error1) -> {
+                        reuploadingCdn = false;
+                        if (response1 instanceof Vector) {
+                            final Vector<TLRPC.TL_fileHash> vector = (Vector) response1;
+                            if (!vector.objects.isEmpty()) {
+                                if (cdnHashes == null) {
+                                    cdnHashes = new HashMap<>();
+                                }
+                                for (int a1 = 0; a1 < vector.objects.size(); a1++) {
+                                    final TLRPC.TL_fileHash hash = vector.objects.get(a1);
+                                    cdnHashes.put(hash.offset, hash);
+                                }
+                            }
+                            startDownloadRequest(connectionType);
+                        } else if (error1 != null) {
+                            if (error1.text.equals("FILE_TOKEN_INVALID") || error1.text.equals("REQUEST_TOKEN_INVALID")) {
+                                isCdn = false;
+                                clearOperation(requestInfo, false, false);
+                                startDownloadRequest(connectionType);
+                            } else {
+                                onFail(false, 0);
+                            }
+                        }
+                    }, null, null, 0, this.datacenterId, ConnectionsManager.ConnectionTypeGeneric, true);
+                }
+            } else {
+                if (response instanceof TLRPC.TL_upload_file) {
+                    requestInfo.response = (TLRPC.TL_upload_file) response;
+                } else if (response instanceof TLRPC.TL_upload_webFile) {
+                    requestInfo.responseWeb = (TLRPC.TL_upload_webFile) response;
+                    if (totalBytesCount == 0 && requestInfo.responseWeb.size != 0) {
+                        totalBytesCount = requestInfo.responseWeb.size;
+                    }
+                } else {
+                    requestInfo.responseCdn = (TLRPC.TL_upload_cdnFile) response;
+                }
+                if (response != null) {
+                    if (currentType == ConnectionsManager.FileTypeAudio) {
+                        StatsController.getInstance(currentAccount).incrementReceivedBytesCount(response.networkType, StatsController.TYPE_AUDIOS, response.getObjectSize() + 4);
+                    } else if (currentType == ConnectionsManager.FileTypeVideo) {
+                        StatsController.getInstance(currentAccount).incrementReceivedBytesCount(response.networkType, StatsController.TYPE_VIDEOS, response.getObjectSize() + 4);
+                    } else if (currentType == ConnectionsManager.FileTypePhoto) {
+                        StatsController.getInstance(currentAccount).incrementReceivedBytesCount(response.networkType, StatsController.TYPE_PHOTOS, response.getObjectSize() + 4);
+                    } else if (currentType == ConnectionsManager.FileTypeFile) {
+                        if (ext != null && (ext.toLowerCase().endsWith("mp3") || ext.toLowerCase().endsWith("m4a"))) {
+                            StatsController.getInstance(currentAccount).incrementReceivedBytesCount(response.networkType, StatsController.TYPE_MUSIC, response.getObjectSize() + 4);
+                        } else {
+                            StatsController.getInstance(currentAccount).incrementReceivedBytesCount(response.networkType, StatsController.TYPE_FILES, response.getObjectSize() + 4);
+                        }
+                    }
+                }
+                if (error == null && response != null) {
+                    measureSpeed(response.getObjectSize());
+                    if (hedgePolicy != null && requestInfo.writtenTime != 0) {
+                        hedgePolicy.onChunkCompleted(SystemClock.elapsedRealtime() - requestInfo.writtenTime, requestInfo.connectionType >>> 16);
+                        latestChunkCompletedTime = SystemClock.elapsedRealtime();
+                    }
+                }
+                processRequestResult(requestInfo, error);
+                if (requestInfo.whenCancelled != null) {
+                    requestInfo.whenCancelled.run();
+                }
+            }
+        }, null, () -> {
+            long now = SystemClock.elapsedRealtime();
+            // writtenTime first: a reader that sees firstWrittenTime set also sees writtenTime (both volatile).
+            requestInfo.writtenTime = now;
+            if (requestInfo.firstWrittenTime == 0) {
+                requestInfo.firstWrittenTime = now;
+            }
+        }, flags, datacenterId, connectionType, isLast);
+        if (BuildVars.LOGS_ENABLED) {
+            FileLog.d("debug_loading: " + cacheFileFinal.getName() + " dc=" + datacenterId + " send reqId " + requestInfo.requestToken + " offset=" + requestInfo.offset + " conType=" + connectionType + " priority=" + priority + (requestInfo.isHedge ? " hedge" : ""));
+        }
+        if (!requestInfo.isHedge) {
+            AndroidUtilities.runOnUIThread(() -> uiRequestTokens.add(requestToken));
+        }
+        scheduleStragglerCheck();
+    }
+
+    private void scheduleStragglerCheck() {
+        if (!hedgingEnabled || stragglerCheckScheduled) {
+            return;
+        }
+        stragglerCheckScheduled = true;
+        Utilities.stageQueue.postRunnable(stragglerCheck, 1000);
+    }
+
+    // Sends a duplicate of the oldest chunks that are far slower than their siblings on another socket.
+    private void checkStragglers() {
+        if (requestInfos != null) {
+            dropOrphanedHedges();
+        }
+        if (!hedgingEnabled || hedgePolicy == null || forceSmallChunk || state != stateDownloading || paused
+                || reuploadingCdn || requestingReference || requestInfos == null || requestInfos.isEmpty()) {
+            return;
+        }
+        // Duplicates only use bandwidth the download is not already using: every chunk has been requested,
+        // or the request window is full of finished chunks waiting behind a missing one.
+        // Same source of truth startDownloadRequest uses to pick the next offset.
+        boolean allRequested = notRequestedBytesRanges != null
+                ? notRequestedBytesRanges.isEmpty()
+                : totalBytesCount > 0 && requestedBytesCount >= totalBytesCount;
+        // Only sequential saves wait behind a missing chunk; out-of-order saves delay chunks just for CDN hashes.
+        boolean windowBlocked = notLoadedBytesRanges == null && !delayedRequestInfos.isEmpty()
+                && requestInfos.size() + delayedRequestInfos.size() >= currentMaxDownloadRequests;
+        if (!allRequested && !windowBlocked) {
+            scheduleStragglerCheck();
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        while (hedgeRequestInfos.size() < DownloadHedgePolicy.MAX_IN_FLIGHT) {
+            RequestInfo straggler = null;
+            for (int i = 0; i < requestInfos.size(); i++) {
+                RequestInfo info = requestInfos.get(i);
+                long firstWrittenTime = info.firstWrittenTime;
+                long writtenTime = info.writtenTime;
+                // Another chunk arrived after this one was first sent, so the link works and this chunk is the slow one.
+                // Its age counts from the latest write, so a resend gets a fair chance on its new socket first.
+                if (info.isHedge || info.hedgePartner != null || info.hedgeCount >= DownloadHedgePolicy.MAX_PER_CHUNK
+                        || info.requestToken == 0 || info.cancelling || info.response != null || firstWrittenTime == 0 || writtenTime == 0
+                        || latestChunkCompletedTime <= firstWrittenTime
+                        || !hedgePolicy.isStraggler(now - writtenTime)) {
+                    continue;
+                }
+                // The earliest offset blocks sequential writes the longest.
+                if (straggler == null || info.offset < straggler.offset) {
+                    straggler = info;
+                }
+            }
+            if (straggler == null || !sendHedge(straggler)) {
+                break;
+            }
+        }
+        scheduleStragglerCheck();
+    }
+
+    private boolean sendHedge(RequestInfo original) {
+        int[] load = new int[downloadConnectionsCount];
+        for (int i = 0; i < requestInfos.size(); i++) {
+            int index = requestInfos.get(i).connectionType >>> 16;
+            if (index < load.length) {
+                load[index]++;
+            }
+        }
+        for (int i = 0; i < hedgeRequestInfos.size(); i++) {
+            int index = hedgeRequestInfos.get(i).connectionType >>> 16;
+            if (index < load.length) {
+                load[index]++;
+            }
+        }
+        int index = hedgePolicy.pickConnection(load, original.connectionType >>> 16, original.failedHedgeConnection);
+        if (index < 0) {
+            return false;
+        }
+        RequestInfo hedge = new RequestInfo();
+        hedge.isHedge = true;
+        hedge.offset = original.offset;
+        hedge.chunkSize = original.chunkSize;
+        hedge.forceSmallChunk = original.forceSmallChunk;
+        hedge.connectionType = ConnectionsManager.ConnectionTypeDownload | (index << 16);
+        if (BuildVars.LOGS_ENABLED) {
+            hedge.requestStartTime = System.currentTimeMillis();
+        }
+        hedge.hedgePartner = original;
+        original.hedgePartner = hedge;
+        original.hedgeCount++;
+        hedgeRequestInfos.add(hedge);
+        // Exactly the original's flags, so a promoted duplicate retries and cancels the same way.
+        int flags = original.requestFlags;
+        if (BuildVars.LOGS_ENABLED) {
+            FileLog.d("debug_loading: " + cacheFileFinal.getName() + " hedging offset=" + original.offset + " stuck for " + (SystemClock.elapsedRealtime() - original.writtenTime) + "ms on conType=" + original.connectionType);
+        }
+        sendChunkRequest(createChunkRequest(hedge.offset, hedge.chunkSize), hedge, flags, isCdn ? cdnDatacenterId : datacenterId, hedge.connectionType, true);
+        return true;
+    }
+
+    // Returns true when this response should continue through the normal chunk handling.
+    private boolean resolveHedgedResponse(RequestInfo info, TLObject response, TLRPC.TL_error error) {
+        RequestInfo partner = info.hedgePartner;
+        if (info.isHedge) {
+            hedgeRequestInfos.remove(info);
+            if (partner == null) {
+                return false;
+            }
+            info.hedgePartner = null;
+            partner.hedgePartner = null;
+            int index = requestInfos.indexOf(partner);
+            if (error != null || response == null || index < 0) {
+                // The original keeps running; its own retries and errors still apply.
+                partner.failedHedgeConnection = info.connectionType >>> 16;
+                return false;
+            }
+            // The duplicate won: it takes the original's slot and the original is dropped.
+            requestInfos.set(index, info);
+            if (priorityRequestInfo == partner) {
+                priorityRequestInfo = info;
+            }
+            partner.cancelled = true;
+            final int partnerToken = partner.requestToken;
+            if (partnerToken != 0) {
+                ConnectionsManager.getInstance(currentAccount).cancelRequest(partnerToken, true);
+                AndroidUtilities.runOnUIThread(() -> uiRequestTokens.remove((Integer) partnerToken));
+            }
+            return true;
+        }
+        if (partner != null) {
+            info.hedgePartner = null;
+            partner.hedgePartner = null;
+            int index = requestInfos.indexOf(info);
+            if (error != null && "RETRY_LIMIT".equals(error.text) && index >= 0) {
+                // The original's socket gave up, so the running duplicate takes its place instead of failing the file.
+                // Other errors (file reference, LIMIT_INVALID, ...) go through their normal recovery below.
+                hedgeRequestInfos.remove(partner);
+                partner.isHedge = false;
+                partner.hedgeCount = info.hedgeCount;
+                partner.failedHedgeConnection = info.connectionType >>> 16;
+                requestInfos.set(index, partner);
+                if (priorityRequestInfo == info) {
+                    priorityRequestInfo = partner;
+                }
+                final int failedToken = info.requestToken;
+                final int promotedToken = partner.requestToken;
+                AndroidUtilities.runOnUIThread(() -> {
+                    uiRequestTokens.remove((Integer) failedToken);
+                    uiRequestTokens.add(promotedToken);
+                });
+                return false;
+            }
+            // The original answered first, so the duplicate is no longer needed.
+            partner.cancelled = true;
+            hedgeRequestInfos.remove(partner);
+            if (partner.requestToken != 0) {
+                ConnectionsManager.getInstance(currentAccount).cancelRequest(partner.requestToken, true);
+            }
+        }
+        return true;
+    }
+
+    // An original can leave requestInfos without its callback running (stream seeks, late cancelled replies).
+    private void dropOrphanedHedges() {
+        for (int i = hedgeRequestInfos.size() - 1; i >= 0; i--) {
+            RequestInfo hedge = hedgeRequestInfos.get(i);
+            if (hedge.hedgePartner != null && requestInfos.contains(hedge.hedgePartner)) {
+                continue;
+            }
+            hedgeRequestInfos.remove(i);
+            hedge.cancelled = true;
+            if (hedge.hedgePartner != null) {
+                hedge.hedgePartner.hedgePartner = null;
+                hedge.hedgePartner = null;
+            }
+            if (hedge.requestToken != 0) {
+                ConnectionsManager.getInstance(currentAccount).cancelRequest(hedge.requestToken, true);
+            }
+        }
+    }
+
+    private void cancelHedges() {
+        Utilities.stageQueue.cancelRunnable(stragglerCheck);
+        stragglerCheckScheduled = false;
+        if (hedgeRequestInfos.isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < hedgeRequestInfos.size(); i++) {
+            RequestInfo hedge = hedgeRequestInfos.get(i);
+            hedge.cancelled = true;
+            if (hedge.hedgePartner != null) {
+                hedge.hedgePartner.hedgePartner = null;
+                hedge.hedgePartner = null;
+            }
+            if (hedge.requestToken != 0) {
+                ConnectionsManager.getInstance(currentAccount).cancelRequest(hedge.requestToken, true);
+            }
+        }
+        hedgeRequestInfos.clear();
     }
 
     public void setDelegate(FileLoadOperationDelegate delegate) {

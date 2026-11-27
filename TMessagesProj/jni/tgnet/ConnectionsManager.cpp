@@ -3049,6 +3049,12 @@ void ConnectionsManager::processRequestQueue(uint32_t connectionTypes, uint32_t 
                 std::vector<std::unique_ptr<NetworkMessage>> array;
                 array.push_back(std::unique_ptr<NetworkMessage>(networkMessage));
                 sendMessagesToConnectionWithConfirmation(array, connection, false);
+                // Moagram: downloads time stalled chunks from their first write, not only from resends.
+                // Uploads keep the upstream behavior because they pace themselves on this callback.
+                // Cancel requests (rpc_drop_answer) are skipped defensively; they register no write callback today.
+                if ((request->connectionType & 0x0000ffff) == ConnectionTypeDownload && !request->isCancelRequest()) {
+                    request->onWriteToSocket();
+                }
                 break;
             }
             default:
