@@ -34,14 +34,27 @@ import java.util.concurrent.CountDownLatch;
 @Keep
 public class PushListenerController {
     public static final int PUSH_TYPE_FIREBASE = 2,
+        PUSH_TYPE_WEB = 10,
         PUSH_TYPE_HUAWEI = 13;
 
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({
             PUSH_TYPE_FIREBASE,
+            PUSH_TYPE_WEB,
             PUSH_TYPE_HUAWEI
     })
     public @interface PushType {}
+
+    static String pushTag(@PushType int pushType) {
+        switch (pushType) {
+            case PUSH_TYPE_FIREBASE:
+                return "fcm";
+            case PUSH_TYPE_WEB:
+                return "webpush";
+            default:
+                return "hcm";
+        }
+    }
 
     public static final int NOTIFICATION_ID = 1;
     private static CountDownLatch countDownLatch = new CountDownLatch(1);
@@ -66,7 +79,7 @@ public class PushListenerController {
                 if (userConfig.getClientUserId() != 0) {
                     final int currentAccount = a;
                     if (sendStat) {
-                        String tag = pushType == PUSH_TYPE_FIREBASE ? "fcm" : "hcm";
+                        String tag = pushTag(pushType);
                         TLRPC.TL_help_saveAppLog req = new TLRPC.TL_help_saveAppLog();
                         TLRPC.TL_inputAppEvent event = new TLRPC.TL_inputAppEvent();
                         event.time = SharedConfig.pushStringGetTimeStart;
@@ -94,7 +107,7 @@ public class PushListenerController {
     }
 
     public static void processRemoteMessage(@PushType int pushType, String data, long time) {
-        String tag = pushType == PUSH_TYPE_FIREBASE ? "FCM" : "HCM";
+        String tag = pushTag(pushType).toUpperCase(Locale.US);
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d(tag + " PRE START PROCESSING");
         }

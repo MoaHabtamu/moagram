@@ -205,6 +205,10 @@ public class NotificationServiceTest {
         static SharedPreferences getGlobalNotificationsSettings() { return global; }
         static SharedPreferences getMainSettings(int account) { return accounts[account]; }
     }
+    static class MoagramPush {
+        static boolean active;
+        static boolean isActive() { return active; }
+    }
     static class UserConfig {
         static final int MAX_ACCOUNT_COUNT=3;
         static int selectedAccount;
@@ -237,6 +241,7 @@ public class NotificationServiceTest {
         events.clear(); delayed.clear(); alarm=new AlarmManager(); manager=new NotificationManager();
         SharedConfig.passcodeHash=""; SharedConfig.appLocked=false; LocalRepeatRefill.schedules=0;
         MessagesController.global.values.clear();
+        MoagramPush.active=false;
         UserConfig.selectedAccount=0;
         for (int a=0;a<3;a++) {
             MessagesController.accounts[a].values.clear(); UserConfig.accounts[a].active=a<2;
@@ -283,6 +288,14 @@ public class NotificationServiceTest {
         check(disabled.onStartCommand(null,0,1)==Service.START_NOT_STICKY && disabled.stopped==1,"stale start does not re-enable");
         disabled.onDestroy();
         check(alarm.scheduled==0,"disabled destroy never schedules recovery");
+        reset();
+        MoagramPush.active=true;
+        MessagesController.global.values.put("pushService",true);
+        check(!NotificationsService.isKeepAliveEnabled(),"working UnifiedPush makes keep-alive unnecessary");
+        ApplicationLoader.startPushService();
+        check(stops==1 && starts==0 && alarm.cancelled==1,"UnifiedPush stops the service and its recovery alarm");
+        MoagramPush.active=false;
+        check(NotificationsService.isKeepAliveEnabled(),"losing UnifiedPush brings keep-alive back");
         reset();
         MessagesController.accounts[0].values.put("backgroundConnection",false);
         check(!ConnectionsManager.accounts[0].isPushConnectionEnabled()

@@ -16373,6 +16373,9 @@ public class MessagesController extends BaseController implements NotificationCe
                 SharedConfig.pushString = regid;
                 SharedConfig.pushType = pushType;
                 getUserConfig().saveConfig(false);
+                if (pushType == PushListenerController.PUSH_TYPE_WEB) {
+                    MoagramPush.onRegistered();
+                }
             }
             AndroidUtilities.runOnUIThread(() -> registeringForPush = false);
         });

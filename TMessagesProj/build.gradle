@@ -56,6 +56,14 @@ dependencies {
     implementation "androidx.mediarouter:mediarouter:1.7.0"
     implementation 'com.google.zxing:core:3.5.4'
     implementation 'com.neovisionaries:nv-websocket-client:2.14'
+    // UnifiedPush: push notifications without Firebase or an always-on service.
+    // The connector depends on the JVM build of Tink, while recaptcha's security-crypto
+    // brings tink-android; both contain the same classes. Keep only tink-android, raised
+    // to the version the connector was built against.
+    implementation('org.unifiedpush.android:connector:3.3.5') {
+        exclude group: 'com.google.crypto.tink', module: 'tink'
+    }
+    implementation 'com.google.crypto.tink:tink-android:1.23.0'
 
     implementation 'androidx.car.app:app:1.4.0'
     implementation 'androidx.car.app:app-projected:1.4.0'
@@ -148,6 +156,8 @@ android {
     defaultConfig {
         buildConfigField "int", "TELEGRAM_APP_ID", getProps("MOAGRAM_APP_ID") ?: "0"
         buildConfigField "String", "TELEGRAM_APP_HASH", groovy.json.JsonOutput.toJson(getProps("MOAGRAM_APP_HASH") ?: "")
+        // Moagram's web push relay (Tools/push-gateway). Empty disables UnifiedPush.
+        buildConfigField "String", "MOAGRAM_PUSH_GATEWAY", groovy.json.JsonOutput.toJson(getProps("MOAGRAM_PUSH_GATEWAY") ?: "")
 
         minSdkVersion 23
         targetSdkVersion 36

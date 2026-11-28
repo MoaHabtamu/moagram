@@ -498,6 +498,13 @@
                 android:value="Maintain a user-enabled MTProto connection for incoming message notifications, including devices without push services" />
         </service>
         <service
+            android:name=".MoagramUnifiedPushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.PUSH_EVENT" />
+            </intent-filter>
+        </service>
+        <service
             android:name=".NotificationRepeat"
             android:exported="false"
             android:foregroundServiceType="dataSync"

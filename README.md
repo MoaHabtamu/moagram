@@ -59,6 +59,7 @@ Use JDK 17 or a compatible newer JDK, Android SDK 36, NDK 27.2.12479018, and CMa
 | Understand the custom controls | [Features](docs/FEATURES.md) |
 | Set up daily or weekly messages | [Repeating messages](docs/REPEATING_MESSAGES.md) |
 | Compile my own APK | [Building](docs/BUILDING.md) |
+| Get notifications without the always-on background service | [Push notifications](docs/PUSH_NOTIFICATIONS.md) |
 | Find the relevant code and run checks | [Development](docs/DEVELOPMENT.md) |
 | Keep Moagram current with Telegram | [Automated upstream updates](docs/UPSTREAM.md#automated-telegram-updates) |
 | Report a bug or propose a change | [Contributing](CONTRIBUTING.md) |

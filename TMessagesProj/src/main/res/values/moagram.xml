@@ -190,6 +190,19 @@
     <string name="BackgroundHealthActive">Active</string>
     <string name="BackgroundHealthPartial">Partial</string>
     <string name="BackgroundHealthDisabled">Disabled</string>
+    <string name="MoagramPushTitle">Push Notifications</string>
+    <string name="MoagramPushActiveVia">Active via %1$s</string>
+    <string name="MoagramPushGoogle">Google</string>
+    <string name="MoagramPushConnecting">Connecting…</string>
+    <string name="MoagramPushNoDistributor">Not set up</string>
+    <string name="MoagramPushNoRelay">Unavailable</string>
+    <string name="MoagramPushTurnOn">Turn On</string>
+    <string name="MoagramPushTurnOff">Turn Off</string>
+    <string name="MoagramPushKeepAliveNotNeeded">Not needed</string>
+    <string name="MoagramPushNoRelayInfo">This build of Moagram has no push relay configured, so notifications use the background connection.</string>
+    <string name="MoagramPushNoDistributorInfo">This phone has no Google Play services, so Moagram cannot use Google\'s push service. Install a UnifiedPush app such as ntfy, then reopen Moagram. Moagram will then receive notifications through it and no longer needs its always-on background connection, which saves battery and memory.</string>
+    <string name="MoagramPushOnInfo">Notifications arrive through Google\'s push service or your UnifiedPush app, so Moagram can close in the background. Turning this off brings back the always-on background connection.</string>
+    <string name="MoagramPushOffInfo">Receive notifications through Google\'s push service (or a UnifiedPush app) instead of the always-on background connection?</string>
     <string name="BackgroundHealthInfo">Allowing unrestricted battery usage and notifications helps Moagram deliver incoming messages promptly and refill repeating schedules while closed.</string>
 
     <!-- Interface & Confirmations (Phase 2 UX) -->
