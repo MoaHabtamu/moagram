@@ -15,11 +15,14 @@ import org.telegram.messenger.LocalRepeatController;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MoagramConfig;
+import org.telegram.messenger.MoagramPush;
+import org.telegram.messenger.MoagramUnifiedPush;
 import org.telegram.messenger.MoagramUpdateController;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserConfig;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.BackDrawable;
 import org.telegram.ui.ActionBar.BaseFragment;
 import org.telegram.ui.ActionBar.Theme;
@@ -50,6 +53,7 @@ public class MoagramSettingsActivity extends BaseFragment implements Notificatio
     private int healthHeaderRow;
     private int batteryRow;
     private int notificationsRow;
+    private int pushRow;
     private int keepAliveRow;
     private int healthInfoRow;
     private int updatesRow;
@@ -108,6 +112,7 @@ public class MoagramSettingsActivity extends BaseFragment implements Notificatio
         healthHeaderRow = rowCount++;
         batteryRow = rowCount++;
         notificationsRow = rowCount++;
+        pushRow = rowCount++;
         keepAliveRow = rowCount++;
         healthInfoRow = rowCount++;
         updatesRow = rowCount++;
@@ -153,6 +158,8 @@ public class MoagramSettingsActivity extends BaseFragment implements Notificatio
                 MoagramConfig.openBatteryOptimizationSettings(getParentActivity());
             } else if (position == notificationsRow) {
                 MoagramConfig.openNotificationSettings(getParentActivity());
+            } else if (position == pushRow) {
+                showPushDialog();
             } else if (position == keepAliveRow) {
                 presentFragment(new NotificationsSettingsActivity());
             } else if (position == updatesRow) {
@@ -169,6 +176,56 @@ public class MoagramSettingsActivity extends BaseFragment implements Notificatio
         if (listAdapter != null) {
             listAdapter.notifyDataSetChanged();
         }
+    }
+
+    private void showPushDialog() {
+        if (getParentActivity() == null) {
+            return;
+        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle(LocaleController.getString(R.string.MoagramPushTitle));
+        if (!MoagramPush.isConfigured()) {
+            builder.setMessage(LocaleController.getString(R.string.MoagramPushNoRelayInfo));
+            builder.setPositiveButton(LocaleController.getString(R.string.OK), null);
+        } else if (MoagramPush.isUserEnabled() && !MoagramPush.isAvailable()) {
+            builder.setMessage(LocaleController.getString(R.string.MoagramPushNoDistributorInfo));
+            builder.setPositiveButton(LocaleController.getString(R.string.OK), null);
+        } else if (MoagramPush.isUserEnabled()) {
+            builder.setMessage(LocaleController.getString(R.string.MoagramPushOnInfo));
+            builder.setPositiveButton(LocaleController.getString(R.string.MoagramPushTurnOff), (dialog, which) -> {
+                MoagramPush.setUserEnabled(false);
+                listAdapter.notifyDataSetChanged();
+            });
+            builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        } else {
+            builder.setMessage(LocaleController.getString(R.string.MoagramPushOffInfo));
+            builder.setPositiveButton(LocaleController.getString(R.string.MoagramPushTurnOn), (dialog, which) -> {
+                MoagramPush.setUserEnabled(true);
+                listAdapter.notifyDataSetChanged();
+            });
+            builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        }
+        showDialog(builder.create());
+    }
+
+    private String pushStatusValue() {
+        if (!MoagramPush.isConfigured()) {
+            return LocaleController.getString(R.string.MoagramPushNoRelay);
+        }
+        if (!MoagramPush.isUserEnabled()) {
+            return LocaleController.getString(R.string.BackgroundHealthDisabled);
+        }
+        if (!MoagramPush.isAvailable()) {
+            return LocaleController.getString(R.string.MoagramPushNoDistributor);
+        }
+        if (MoagramPush.isActive()) {
+            String name = MoagramPush.TRANSPORT_FCM.equals(MoagramPush.activeTransport())
+                    ? LocaleController.getString(R.string.MoagramPushGoogle)
+                    : MoagramUnifiedPush.distributorName();
+            return name == null ? LocaleController.getString(R.string.BackgroundHealthActive)
+                    : LocaleController.formatString(R.string.MoagramPushActiveVia, name);
+        }
+        return LocaleController.getString(R.string.MoagramPushConnecting);
     }
 
     private String formatRepeatsValue() {
@@ -322,6 +379,23 @@ public class MoagramSettingsActivity extends BaseFragment implements Notificatio
                         cell.setTextValueColor(Theme.getColor(allowed
                                 ? Theme.key_windowBackgroundWhiteValueText
                                 : Theme.key_text_RedRegular));
+                    } else if (position == pushRow) {
+                        boolean active = MoagramPush.isActive();
+                        cell.setTextAndValue(
+                                LocaleController.getString(R.string.MoagramPushTitle),
+                                pushStatusValue(),
+                                true
+                        );
+                        cell.setTextValueColor(Theme.getColor(active
+                                ? Theme.key_windowBackgroundWhiteValueText
+                                : Theme.key_windowBackgroundWhiteGrayText2));
+                    } else if (position == keepAliveRow && MoagramPush.isActive()) {
+                        cell.setTextAndValue(
+                                LocaleController.getString(R.string.BackgroundHealthKeepAlive),
+                                LocaleController.getString(R.string.MoagramPushKeepAliveNotNeeded),
+                                false
+                        );
+                        cell.setTextValueColor(Theme.getColor(Theme.key_windowBackgroundWhiteValueText));
                     } else if (position == keepAliveRow) {
                         MessagesController mc = MessagesController.getInstance(currentAccount);
                         boolean both = mc.keepAliveService && mc.backgroundConnection;
@@ -361,7 +435,7 @@ public class MoagramSettingsActivity extends BaseFragment implements Notificatio
         @Override
         public int getItemViewType(int position) {
             if (position == featuresHeaderRow || position == healthHeaderRow) return TYPE_HEADER;
-            if (position == batteryRow || position == notificationsRow || position == keepAliveRow) return TYPE_SETTINGS;
+            if (position == batteryRow || position == notificationsRow || position == pushRow || position == keepAliveRow) return TYPE_SETTINGS;
             if (position == healthInfoRow) return TYPE_INFO;
             if (position == featuresShadowRow || position == endShadowRow) return TYPE_SHADOW;
             return TYPE_TEXT;

@@ -122,6 +122,10 @@ public class NotificationsService extends Service {
     }
 
     public static boolean isKeepAliveEnabled() {
+        // Push delivery through UnifiedPush makes the always-on connection unnecessary.
+        if (MoagramPush.isActive()) {
+            return false;
+        }
         SharedPreferences preferences = MessagesController.getGlobalNotificationsSettings();
         if (preferences.contains("pushService")) {
             return preferences.getBoolean("pushService", true);

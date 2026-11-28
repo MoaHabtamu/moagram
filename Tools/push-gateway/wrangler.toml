@@ -1,0 +1,7 @@
+name = "moagram-push"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+# Only relay to these UnifiedPush hosts. Add your own ntfy server if you run one.
+ALLOWED_HOSTS = "ntfy.sh"

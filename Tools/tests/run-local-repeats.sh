@@ -11,6 +11,8 @@ python3 Tools/tests/test-download-hedge.py
 python3 Tools/tests/test-photo-permissions.py
 python3 Tools/tests/test-contact-sorting.py
 python3 Tools/tests/test-notification-service.py
+python3 Tools/tests/test-webpush-crypto.py
+node --test Tools/tests/test-push-gateway.mjs
 python3 Tools/tests/test-moagram-updates.py
 python3 Tools/tests/test-update-flow.py
 python3 Tools/tests/test-update-layout.py

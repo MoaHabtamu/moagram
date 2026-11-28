@@ -27,6 +27,10 @@ public class GcmPushListenerService extends FirebaseMessagingService {
             FileLog.d("FCM received data: " + data + " from: " + from);
         }
 
+        // Pushes relayed through Moagram's own Firebase project carry an encrypted web push.
+        if (MoagramFcmPush.onDataMessage(data)) {
+            return;
+        }
         PushListenerController.processRemoteMessage(PushListenerController.PUSH_TYPE_FIREBASE, data.get("p"), time);
     }
 
@@ -37,6 +41,10 @@ public class GcmPushListenerService extends FirebaseMessagingService {
                 FileLog.d("Refreshed FCM token: " + token);
             }
             ApplicationLoader.postInitApplication();
+            if (MoagramFcmPush.isCurrentProvider()) {
+                MoagramFcmPush.registerToken(token);
+                return;
+            }
             PushListenerController.sendRegistrationToServer(PushListenerController.PUSH_TYPE_FIREBASE, token);
         });
     }

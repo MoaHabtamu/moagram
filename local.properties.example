@@ -7,3 +7,6 @@ MOAGRAM_KEYSTORE_FILE=TMessagesProj/config/moagram_release.keystore
 MOAGRAM_STORE_PASSWORD=replace_with_your_store_password
 MOAGRAM_KEY_ALIAS=moagram
 MOAGRAM_KEY_PASSWORD=replace_with_your_key_password
+# Optional: your deployed push relay (Tools/push-gateway, docs/PUSH_NOTIFICATIONS.md). Leave empty to
+# keep using the background connection service for notifications.
+MOAGRAM_PUSH_GATEWAY=https://moagram-push.example.workers.dev

@@ -114,7 +114,26 @@ public class ApplicationLoader extends Application {
     }
 
     protected PushListenerController.IPushListenerServiceProvider onCreatePushProvider() {
+        // Moagram's package is not registered with Telegram's Firebase project, so with a
+        // relay configured prefer Moagram's own Firebase project, then a UnifiedPush app.
+        if (MoagramFcmPush.shouldUse()) {
+            return MoagramFcmPush.INSTANCE;
+        }
+        if (MoagramUnifiedPush.shouldUse()) {
+            return MoagramUnifiedPush.INSTANCE;
+        }
         return PushListenerController.GooglePushListenerServiceProvider.INSTANCE;
+    }
+
+    /** Re-picks the push provider (after a settings change) and requests a fresh token. */
+    public static void refreshPushProvider() {
+        AndroidUtilities.runOnUIThread(() -> {
+            pushProvider = null;
+            if (applicationLoaderInstance != null) {
+                applicationLoaderInstance.initPushServices();
+            }
+            startPushService();
+        });
     }
 
     public static String getApplicationId() {
